@@ -1,0 +1,814 @@
+﻿<!doctype html>
+<html lang='ja'>
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="none">
+<title>てくてくノート ver 2024-01-07</title>
+<link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
+<link rel='icon' href='./tekuteku-icon.ico'>
+<meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
+<style>.teku { background-size: auto; background-repeat: no-repeat; }</style>
+</head>
+<body>
+<div class="container-fluid">
+	<div class="row">
+	<div class="col col-10">
+	<div class="input-group m-2"><input type="text" id="host" class="form-control fs-4 alert alert-warning" placeholder="ここにサーバアドレスを記入して'ENTER'を押して下さい。"/></div>
+	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;resize:vertical;" id="whiteboard-div">
+		<table class="table table-sm table-dark table-borderless align-left m-2 fs-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
+	</div>
+	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-4" id="table-takers"><tbody></tbody></table>
+	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-4" rows="1" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
+	<div class="input-group m-2 taker"><textarea id="pre-roll" class="form-control fs-4" style="overflow:auto;height:20vh;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
+	<div class="d-flex flex-row justify-content-start align-items-center">
+	<div class="col col-auto">
+	<div class="input-group m-2">
+		<input type="checkbox" value="" id="dark-mode" class="form-check-input mx-2"><label class="form-control-label" for="dark-mode">ダークモード</label>
+		<input class="form-check-input mx-2" type="checkbox" value="" id="readonly"><label class="form-control-label" for="readonly">見るだけ</label>
+		<input class="form-check-input mx-2" type="checkbox" value="" id="readonly-jimaku" style="display:none;"><label class="form-control-label" for="readonly-jimaku" style="display:none;">字幕表示</label>
+	</div>
+	</div>
+	<div class="col col-auto">
+	<div class="input-group m-2">
+		<button class="btn btn-sm btn-outline-secondary" id="font-size-small">小</button>
+		<span class="m-2">文字サイズ</span>
+		<button class="btn btn-sm btn-outline-secondary" id="font-size-large">大</button>
+	</div></div>
+	</div>
+	<div id="xxx"></div>
+	</div>
+	<div class="col-2 taker" id="shortcut">
+		<div class="input-group m-2"><span class="input-group-text">F1</span><input type="text" id="key-1" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F2</span><input type="text" id="key-2" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F3</span><input type="text" id="key-3" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F4</span><input type="text" id="key-4" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F5</span><input type="text" id="key-5" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F6</span><input type="text" id="key-6" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F7</span><input type="text" id="key-7" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F8</span><input type="text" id="key-8" class="form-control" value=""/></div>
+		<div class="input-group m-2"><span class="input-group-text">F9</span><input type="text" id="key-9" class="form-control" value=""/></div>
+		<div class="input-group m-2">
+			<span class="input-group-text">短縮キー</span>
+			<button class="btn btn-outline-secondary" id="shortcut-load">読込</button><input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
+			<button class="btn btn-outline-secondary" id="shortcut-save">保存</button>
+		</div>
+		<div id="voice-recognition">
+		<div class="input-group m-2 pt-4"><span class="input-group-text w-100">音声認識設定</span></div>
+		<div class="input-group m-2">
+			<button class="btn btn-outline-success" id="recognition-control" value="0" disabled>開始</button>
+			<select class="form-select" id="recognition-engine">
+			<option value="0" selected>ブラウザ標準</option>
+			</select>
+		</div>
+		<div class="form-check m-2" id="recognition-lang">
+		<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-ja-JP" checked><label class="form-check-label" for="recognition-lang-ja-JP">日本語 </label></div>
+		<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-en"><label class="form-check-label" for="recognition-lang-en">英語 </label></div>
+		<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-de"><label class="form-check-label" for="recognition-lang-de">ドイツ語 </label></div>
+		<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-zh"><label class="form-check-label" for="recognition-lang-zh">中国語</label></div>
+		</div>
+		<div class="input-group m-2" id="recognition-dic"><button class="btn btn-success" id="dictionary-load">辞書読込</button><input type="file" class="form-control" id="dictionary-load-file" style="display:none;" /></div>
+		<div class="input-group m-2"><input class="form-check-input mx-2" type="checkbox" value="" id="recognition-local"><label class="form-check-label" for="recognition-local">プリロールに出力</label></div>
+		</div>
+		<div class="input-group m-2"><input class="form-check-input mx-2" type="checkbox" value="" id="speech"><label class="form-check-label" for="speech">しゃべる</label></div>
+	</div>
+	</div>
+</div>
+
+<div class="modal fade" id="dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal-dialog">
+<div class="modal-content">
+	<div class="modal-body">
+		<div class="alert alert-warning text-center">サーバアドレスが複数あります。１つ選んで下さい</div>
+		<select class="form-select" id="dialog-select"></select>
+	</div>
+	<div class="modal-footer"><button type="button" class="btn btn-primary" id="dialog-button-ok">決定</button></div>
+</div>
+</div>
+</div>
+
+<div class="modal fade" id="token" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal-dialog">
+<div class="modal-content">
+	<div class="modal-body">
+		<div class="alert alert-warning text-center">Ami Voice 用のパスワードを入力して下さい</div>
+		<input class="form-control" type="password" id="token-text"/>
+	</div>
+	<div class="modal-footer"><button type="button" class="btn btn-primary" id="token-ok">OK</button></div>
+</div>
+</div>
+</div>
+	
+<div style="display:none;">
+<input id="ami-voice-authorization" type="text">
+</div>
+
+<script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
+<script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
+<script src='./tools/sprintf-1.1.2/sprintf.min.js'></script>
+<script type="text/javascript" src="./tools/crypto-js-4.1.1.min.js"></script>
+<script type="text/javascript" src="./tools/ami-voice.js"></script>
+<script type="text/javascript">
+'use strict';
+
+var screen_theme = "light";	// 画面モード : "light"/"dark"
+var screen_mode = 0;		// 0:標準, 1:見るだけ, 2:字幕表示
+var whiteboard_font_size = 2;
+
+var socket;
+var connected = false;
+var is_localhost = false;
+var host = "";
+var id;	// 自分自身の識別子
+var dialog;
+var whiteboard = [];
+var auto_scroll_whiteboard = true;
+var auto_scroll_pre_roll = true;
+var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
+var my_text_previous = '';
+var textarea_height = 0;
+
+var recognizer = null;
+var recognition_local = false;
+var recognized_text_list = [];
+
+class recognized_text {
+	text = "";
+	final = false;
+	tobe_sent = false;
+	id = -1;
+	constructor(text,final,i) {
+		this.text = text;
+		this.final = final;
+		this.id = i;
+		this.tobe_sent = ( this.text.length == 0 ? false : true );	// 空行はここで排除する
+	}
+}
+
+function sanitize(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&apos;').replace(/"/g,'&quot;'); }
+
+var token = {};	// 音声認識エンジン用トークン一覧
+
+async function fetch_token( token_name ) {
+	try {
+		const responce = await fetch(token_name);
+		if (!responce.ok) { return false; }
+		token = await responce.json();
+		return true;
+ 	}
+	catch (error) { alert('音声認識初期化エラー : '+error); return false; }
+}
+
+async function decrypt_token( service_name ) {
+	if ( service_name in token ) {
+		let key = "";
+		let x = new bootstrap.Modal($('#token').get(0),{});
+		let dialog = new Promise((resolve)=>{
+			$('#token-ok').one('click',()=>{ key = sprintf('%32s',$('#token-text').val()); x.hide(); });
+			$('#token')
+				.off('hidden.bs.modal')
+				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+			x.show();
+		});
+		const result = await dialog;
+		if ( /^ *$/.test(key) == false ) {
+			try {
+				let user = CryptoJS.AES.decrypt(token[service_name].username,key).toString(CryptoJS.enc.Utf8);
+				let pass = CryptoJS.AES.decrypt(token[service_name].password,key).toString(CryptoJS.enc.Utf8);
+				return { username: user, password: pass };
+			}
+			catch (error) { console.log("cryptojs error"); }
+		}
+	}
+	return {};
+}
+
+function recognizer_ami_voice() {
+	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:未初期化
+	var debug = false;
+
+	var recognizer_ = {
+		start : start_,
+		stop : stop_,
+		status : status_,
+		set_lang : ()=>{ alert('set_lang is not supported'); },
+		set_dic : set_dic_,
+		on_change_state : undefined
+	};
+
+	decrypt_token('ami-voice').then((token)=>{ if ( 'username' in token ) { Wrp.sid = token.username; Wrp.spw = token.password; change_state(0); } });
+
+	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/";	// ログを残さない場合は /nolog を付加
+	Wrp.authorizationElement = document.getElementById('ami-voice-authorization');
+	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
+	Wrp.profileWords = "";
+	Wrp.epi = '60000';
+	Recorder.maxRecordingTime = 0;
+
+	function update_result(result,is_final) {
+		let text = sanitize(Result.parse(result).text);
+		let a = my_split(text,35,40,'ja-JP');
+		recognized_text_list = [];
+		let j=0;
+		a.forEach((x)=>{ recognized_text_list.push(new recognized_text(x,is_final,j++)); });
+		if ( recognition_local == true ) {
+			let s = "";
+			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
+			$('#pre-roll').val(s);
+			if ( auto_scroll_pre_roll == true ) $('#pre-roll').scrollTop($('#pre-roll')[0].scrollHeight);
+		}
+		else { send(0); }
+	};
+	function change_state(i) {
+		state = i;
+		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
+	};
+
+	if ( debug == false ) {
+		Wrp.connectStarted = function(){ change_state(1); };
+		Wrp.connectEnded = function(){};
+		Wrp.disconnectStarted = function(){ change_state(1); };
+		Wrp.disconnectEnded = function(){ change_state(0); };
+		Wrp.feedDataResumeStarted = function(){};
+		Wrp.feedDataResumeEnded = function(){ change_state(2); };
+		Wrp.feedDataPauseStarted = function(){};
+		Wrp.feedDataPauseEnded = function(reason){};
+		Wrp.utteranceStarted = function(time){};
+		Wrp.utteranceEnded = function(time){};
+		Wrp.issueStarted = function(){ change_state(1); };
+		Wrp.issueEnded = function(){ Wrp.feedDataResume(); };
+		Wrp.resultCreated = function(){ recognized_text_list = []; send(2); };
+		Wrp.resultUpdated = function(result){ update_result(result,false); };
+		Wrp.resultFinalized = function(result){ update_result(result,true); };
+		Wrp.eventNotified = function(event_id,event_message){};
+		Wrp.TRACE = function(message){};
+	}
+	else {
+		Wrp.connectStarted = function(){ change_state(1); console.log('# connectStarted'); };
+		Wrp.connectEnded = function(){ console.log('# connectEnded'); };
+		Wrp.disconnectStarted = function(){ change_state(1); console.log('# disconnectStarted'); };
+		Wrp.disconnectEnded = function(){ change_state(0); console.log('# disconnectEnded'); };
+		Wrp.feedDataResumeStarted = function(){ console.log('# feedDataResumeStarted'); };
+		Wrp.feedDataResumeEnded = function(){ change_state(2); console.log('# feedDataResumeEnded'); };
+		Wrp.feedDataPauseStarted = function(){ console.log('# feedDataPauseStarted'); };
+		Wrp.feedDataPauseEnded = function(reason){ console.log('# feedDataPauseEnded'+reason); };
+		Wrp.utteranceStarted = function(time){ console.log('# utteranceStarted'); };
+		Wrp.utteranceEnded = function(time){ console.log('# utteranceEnded'); };
+		Wrp.issueStarted = function(){ change_state(1); console.log('# issueStarted'); };
+		Wrp.issueEnded = function(){
+			console.log('# issueEnded');
+			console.log('grammarFileNames='+Wrp.grammarFileNames);
+			console.log('authorization='+Wrp.authorizationElement.value);
+			Wrp.feedDataResume();
+		};
+		Wrp.resultCreated = function(){ console.log('# resultCreated'); recognized_text_list = []; send(2); };
+		Wrp.resultUpdated = function(result){ console.log('# resultUpdated'); update_result(result,false); };
+		Wrp.resultFinalized = function(result){ console.log('# resultFinalized'); update_result(result,true); };
+		Wrp.eventNotified = function(event_id,event_message){ console.log("# eventNotified:[" + event_id + "][" + event_message + "]"); };
+		Wrp.TRACE = function(message){ console.log('# TRACE:'+message); };
+	}
+
+	function start_(){ if ( state == 0 ) { Wrp.issue(); } };
+	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } };
+	function status_(){ change_state(state); return state; };
+	function set_dic_(dictionary){ Wrp.profileWords = dictionary.join('|'); };
+	return recognizer_;
+}
+
+function recognizer_default() {
+	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:未初期化
+	var debug = false;
+
+	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
+	var sprec = new SpeechRecognition();
+	sprec.continuous = true;
+	sprec.interimResults = true;
+	sprec.maxAlternatives = 1;
+	sprec.lang = 'ja-JP';
+
+	sprec.onresult = function(event) {
+		recognized_text_list = [];
+		let j=0;
+		for (let i=0;i<event.results.length;i++) {
+			let result = event.results[i];
+			let a = my_split(result[0].transcript,35,40,sprec.lang);
+			a.forEach((x)=>{ recognized_text_list.push(new recognized_text(x,result.isFinal,j++)); });
+		}
+		if ( recognition_local == true ) {
+			let s = "";
+			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
+			$('#pre-roll').val(s);
+			if ( auto_scroll_pre_roll == true ) $('#pre-roll').scrollTop($('#pre-roll')[0].scrollHeight);
+		}
+		else { send(0); }
+	}
+	sprec.onspeechstart = function(event) {
+		recognized_text_list = [];
+		send(2);
+	}
+	sprec.onspeechend = function(event) {}
+	sprec.onstart = function() { change_state(2); }
+	sprec.onend = function() { if ( state == 2 ) { sprec.start(); } }
+	sprec.onerror = function(event) { console.log('recognition error : '+event.error); sprec.stop(); }
+
+	var recognizer_ = {
+		start : start_,
+		stop : stop_,
+		status : status_,
+		set_lang : set_lang_,
+		set_dic : ()=>{ alert('set_dic is not supported'); },
+		on_change_state : undefined
+	};
+
+	function change_state(i) {
+		state = i;
+		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
+	};
+
+	function start_(){ if ( state == 0 ) { sprec.start(); } };
+	function stop_(){ change_state(0); sprec.stop(); };
+	function status_(){ change_state(state); return state; };
+	function set_lang_(lang){ sprec.lang = lang; if ( state == 2 ) { sprec.stop(); } };
+	change_state(0);
+	return recognizer_;
+};
+
+function recognition_control_update(state) {
+	switch (state) {
+		case 0: { $('#recognition-control').prop('disabled',false).text('開始').val(0); break; }
+		case 1: { $('#recognition-control').prop('disabled',true).text('...').val(1); break; }
+		case 2: { $('#recognition-control').prop('disabled',false).text('停止').val(2); break; }
+		case 9: { $('#recognition-control').prop('disabled',true).text('開始').val(9); break; }
+	}
+};
+
+function set_recognition_engine() {
+	if (recognizer) { recognizer.stop(); recognizer = null; }
+	switch ( $('#recognition-engine').val() ) {
+		case "0": {
+			recognizer = recognizer_default();
+			$('#recognition-lang').show().trigger('change');
+			$('#recognition-dic').hide();
+			break;
+		}
+		case "1": {
+			recognizer = recognizer_ami_voice();
+			$('#recognition-lang').hide();
+			$('#recognition-dic').show();
+			break;
+		}
+	}
+	recognizer.on_change_state = recognition_control_update;
+	recognizer.status();
+};
+
+function my_split(s,min_length,max_length,lang) {
+	var b = [];
+	if ( lang == 'ja-JP' ) {
+		// [\u3041-\u3096] : ひらがな（サロゲートペアは除く）
+		// [\u3041-\u3096]([\u3400-\u9FFF\uF900-\uFAFF]) : ひらがな＋漢字
+		// Chrome の音声認識は文の間に半角スペースが入る。
+		//
+		for (let x=s;;) {
+			if ( x.length <= min_length ) { b.push(x); break; }
+			let i = x.substring(min_length,max_length+1).search(/([ .,。、]|[\u3041-\u3096][\u3400-\u9FFF\uF900-\uFAFF])/);
+			let j = ( i == -1 ? max_length : min_length+i+1 );
+			b.push(x.substring(0,j));
+			x = x.substring(j);
+		}
+	}
+	else {
+		for (let x=s;;) {
+			if ( x.length <= min_length ) { b.push(x); break; }
+			let i = x.substring(min_length,max_length+1).search(/[ .,:;]/);
+			let j = ( i == -1 ? max_length : min_length+i+1 );
+			b.push(x.substring(0,j));
+			x = x.substring(j);
+		}
+	}
+	return b;
+}
+
+async function host_select(hosts) {
+	$('#dialog-select').empty();
+	hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').html(c).val(c)); });
+	let x = new bootstrap.Modal($('#dialog').get(0),{});
+	let dialog = new Promise((resolve)=>{
+		$('#dialog-button-ok').one('click',()=>{
+			host=$('#dialog-select > option:selected').val();
+			$('#host').val(`${host} に接続しました。このアドレスを他の人に通知して下さい。`).removeClass('alert-warning').addClass('alert-success');
+			x.hide();
+		});
+		$('#dialog')
+			.off('hidden.bs.modal')
+			.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+		x.show();
+	});
+	const result = await dialog;
+}
+
+function send( status ) {
+	if ( connected == true ) {
+		var responce = new Object();
+		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),全データ要求(9)
+		if ( screen_mode == 0 ) {
+			responce.text = $('#my-text').val();
+			responce.text_index = my_text_index;
+			responce.voice_text = [];
+			if ( recognition_local == false ) {
+				recognized_text_list.forEach((c)=>{
+					if ( c.tobe_sent == true ) {
+						responce.voice_text.push({text:( c.text + ( c.final == true ? "" : " ..." ) ),id:c.id});
+						if ( c.final == true ) { c.tobe_sent = false; }
+					}
+				});
+			}
+		}
+		socket.send(JSON.stringify(responce));
+	}
+}
+
+function open( host ) {
+	let url = ( location.protocol == 'http:' ? 'ws://' : 'wss://' )+host+'/';
+	if ( connected == true ) { close(); }
+	socket = new WebSocket(url);
+	$('#host').val('接続中 ...').removeClass('alert-success').addClass('alert-warning');
+	socket.onopen = function(event){ connected = true; send(9); };
+	socket.onclose = function(event){ close(); };
+	socket.onerror = function(event){ close(); }
+	socket.onmessage = receive;
+}
+
+function close() {
+	socket.close();
+	socket = undefined;
+	$('#host').val('サーバとの接続が切断されました。再接続して下さい。').removeClass('alert-success').addClass('alert-warning');
+	connected = false;
+}
+
+function receive(event) {
+	var responce = JSON.parse(event.data);
+	switch ( responce.type ) {
+	case 0 :
+		id = responce.id;
+		if ( is_localhost == true ) {
+			if ( responce.server.length == 0 ) { alert("ネットワークにつながっていません"); return; }
+			if ( responce.server.length >= 2 ) {
+				host_select(responce.server);
+				return;
+			}
+			else { host = responce.server[0]; }
+		}
+		$('#host').val(`${host} に接続しました。このアドレスを他の人に通知して下さい。`).removeClass('alert-warning').addClass('alert-success');
+		break;
+	case 1 :
+		responce.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
+		whiteboard.splice(responce.whiteboard_size);
+		let t = $('#whiteboard-table > tr > td');
+		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning');
+		responce.whiteboard.forEach((c)=>{
+			if ( c.i < t.length ) {
+				let x = t.eq(c.i);
+				x.attr('name',c.i).html(c.text.replace(/\n/g,'<br>'));
+				if ( c.edit == 1 ) { x.addClass('text-warning'); } else { x.removeClass('text-warning'); }
+			}
+			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',c.i,( c.edit == 1 ? 'class="text-warning"' : '' ),c.text.replace(/\n/g,'<br>'))); }
+		});
+		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div').scrollTop($('#whiteboard-div')[0].scrollHeight);
+		$('#table-takers > tbody').empty();
+		responce.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).forEach((c)=>{
+			if ( c.id == id ) return;
+			var text = ( !('text' in c ) ? "見てるだけ" : c.text.replace(/\n/g,'<br>') );
+			if ( screen_mode != 0 && text == "見てるだけ" ) return;
+			$('#table-takers > tbody').append(( screen_mode != 0 ? 
+				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text) : 
+				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td style="width:20ch;">%s</td><td class="teku">%s</td></tr>',c.num,c.id,text) 
+			));
+		});
+		$('td.teku').css('background-image',mk_guide());
+		expand_whiteboard();	// table-takers の高さが変化するためここも必要。
+		break;
+	}
+}
+
+function append_input( s ) {
+	var o = $('#my-text').get(0);
+	var pos = $(o).prop('selectionStart');
+	var a = $(o).val();
+	$('#my-text').val( a.substring(0,pos)+s+a.substring(pos,a.length) );
+}
+
+function mk_guide() {
+	let o = $('td.teku');
+	let f = parseInt(o.css('font-size'));
+	let w = parseInt(o.css('width'));
+	let h = parseInt(o.css('height'));
+	let x = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w-1} ${h-1}"><line x1="${f*13}" y1="0" x2="${f*13}" y2="${h-1}" stroke="white" stroke-dasharray="4" stroke-width="1"></line></svg>`;
+	return 'url(\'data:image/svg+xml;charset=utf8,'+encodeURIComponent(x)+'\')';
+}
+
+function get_current_line() {
+	// pre-roll の現在行の文字列を取得する。
+	let o = $('#pre-roll').get(0);
+	let s = $(o).val();
+	let pos = $(o).prop('selectionStart');
+	let i0 = ( pos == 0 ? 0 : s.lastIndexOf('\n',( s.charAt(pos) == '\n' ? pos-1 : pos ))+1 );
+	let i1 = s.indexOf("\n",pos);
+	return ( i1 == -1 ? s.substring(i0) : s.substring(i0,i1) );
+}
+
+function expand_whiteboard() { $('#whiteboard-div').height(Math.floor($('#whiteboard-div').height()+($(window).height()-($('#xxx').offset().top+$('#xxx').height())))); }
+function set_font_size( size ) {
+	whiteboard_font_size = size;
+	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(sprintf('fs-%d',whiteboard_font_size));
+}
+function set_theme(theme) { document.documentElement.setAttribute('data-bs-theme',theme); }
+function set_screen_mode(mode) {
+	screen_mode = mode;
+	switch(mode) {
+	case 0 :
+		$('#dark-mode').prop('disabled',false);
+		$('#whiteboard-exclude').remove();
+		$('#host').show();
+		$('.taker').show();
+		$('div.row > div.col:first').addClass('col-10');
+		$('#dark-mode').trigger('change');
+		$('#readonly').prop('checked',false);
+		$('#readonly-jimaku').prop('checked',false);
+		$('#readonly-jimaku, #readonly-jimaku + label').hide();
+		break;
+	case 1 :
+		$('#dark-mode').prop('disabled',true);
+		$('#whiteboard-exclude').remove();
+		$('#host').show();
+		$('.taker').hide();
+		$('div.row > div.col:first').removeClass('col-10');
+		set_theme('dark');
+		$('#readonly').prop('checked',true);
+		$('#readonly-jimaku').prop('checked',false);
+		$('#readonly-jimaku, #readonly-jimaku + label').show();
+		break;
+	case 2 :
+		$('#dark-mode').prop('disabled',true);
+		$('#host').hide();
+		$('.taker').hide();
+		$('div.row > div.col:first').removeClass('col-10');
+		set_theme('dark');
+		$('#readonly').prop('checked',true);
+		$('#readonly-jimaku').prop('checked',true);
+		$('#readonly-jimaku, #readonly-jimaku + label').show();
+		// div の reisze を catch するには observer が必要なので、下記の簡便な方法で代用する。
+		const jimaku_lines = 4.5;
+		let line_height_str = $('#whiteboard-table').css('line-height');
+		let h_exclude = $('#whiteboard-div').height()-parseInt(line_height_str.substr(0,line_height_str.length-2))*jimaku_lines;
+		if ( h_exclude > 0 ) $('#whiteboard-div').before(sprintf('<div class="input-group m-2 bg-dark text-white" style="height:%dpx;" id="whiteboard-exclude">',h_exclude));
+		break;
+	}
+}
+
+function shortcut_from_cookie() {
+	document.cookie.replace(/ /g,'').split(';').forEach((a)=>{
+		let c = a.split('=');
+		let key = c[0];
+		let val = decodeURI(c[1]);
+		switch (key) {
+			case 'F1' : $('#key-1').val(val); break;
+			case 'F2' : $('#key-2').val(val); break;
+			case 'F3' : $('#key-3').val(val); break;
+			case 'F4' : $('#key-4').val(val); break;
+			case 'F5' : $('#key-5').val(val); break;
+			case 'F6' : $('#key-6').val(val); break;
+			case 'F7' : $('#key-7').val(val); break;
+			case 'F8' : $('#key-8').val(val); break;
+			case 'F9' : $('#key-9').val(val); break;
+			case 'screen-theme' : $('#dark-mode').prop('checked',( val == 'dark' ? true : false )); set_theme(val); break;
+//			case 'font-size' : set_font_size(parseInt(val)); break;
+			case 'screen-mode' : set_screen_mode(parseInt(val)); break;
+		}
+	});
+}
+
+function shortcut_to_cookie() {
+	document.cookie = 'F1='+encodeURI($('#key-1').val());
+	document.cookie = 'F2='+encodeURI($('#key-2').val());
+	document.cookie = 'F3='+encodeURI($('#key-3').val());
+	document.cookie = 'F4='+encodeURI($('#key-4').val());
+	document.cookie = 'F5='+encodeURI($('#key-5').val());
+	document.cookie = 'F6='+encodeURI($('#key-6').val());
+	document.cookie = 'F7='+encodeURI($('#key-7').val());
+	document.cookie = 'F8='+encodeURI($('#key-8').val());
+	document.cookie = 'F9='+encodeURI($('#key-9').val());
+	document.cookie = 'screen-theme='+encodeURI(( $('#dark-mode').prop('checked') == true ? 'dark' : 'light' ));
+	document.cookie = 'screen-mode='+encodeURI(screen_mode.toString());
+//	document.cookie = 'font-size='+encodeURI(whiteboard_font_size.toString());
+}
+
+$(document).ready( function(){
+	shortcut_from_cookie();
+	textarea_height = $('#my-text').height();
+	expand_whiteboard();
+	$(window).on('beforeunload pagehide',function(){ close(); shortcut_to_cookie(); });
+	$(window).on("orientationchange resize",expand_whiteboard);
+	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
+	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
+
+	$('#dictionary-load').on('click',function(){ $('#dictionary-load-file').click(); });
+	$('#dictionary-load-file').on('change',function(){
+		if ( this.files.length == 1 ) {
+			let blob = this.files[0];
+			let reader = new FileReader();
+			reader.onload = function(){
+				let dic = [];
+				reader.result.split(/\r*\n/).forEach(a=>{
+					var c = a.split(/\s+/);
+					if ( c[0].length != 0 && c[1].length != 0 ) { dic.push(c[0]+' '+c[1]); }
+				});
+				recognizer.set_dic(dic);
+				$('#dictionary-load-file').val('');
+				$('#dictionary-load').blur();
+			};
+			reader.readAsText(blob);
+		}
+	});
+	$('#recognition-control').on('click',function(event){ if ( $('#recognition-control').val() == 0 ) { recognizer.start(); } else { recognizer.stop(); } });
+	$('#recognition-engine').on('change',set_recognition_engine);
+	$('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
+	$('input[name="recognition-lang"]').on('change',(event)=>{ recognizer.set_lang($('input[name="recognition-lang"]:checked').attr('id').substring("recognition-lang-".length)); });
+
+	$('#dark-mode').on('change',function(){ set_theme( $('#dark-mode').prop('checked') == true ? 'dark' : 'light' ); });
+	$('#font-size-small').on('click',function(event){ set_font_size(( whiteboard_font_size == 5 ? 5 : whiteboard_font_size+1 )); });
+	$('#font-size-large').on('click',function(event){ set_font_size(( whiteboard_font_size == 1 ? 1 : whiteboard_font_size-1 )); });
+	$('#readonly').on('change',function(event){
+		set_screen_mode(( $('#readonly').prop('checked') == true ? 1 : 0 ));
+		expand_whiteboard();
+		send(0);
+	});
+	$('#readonly-jimaku').on('change',function(event){
+		set_screen_mode(( $('#readonly-jimaku').prop('checked') == true ? 2 : 1 ));
+		expand_whiteboard();
+		send(0);
+	});
+
+	$('#my-text').on('input',function(event){
+		let o = $('#my-text')[0];
+		if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
+		send(0);
+	});
+
+	$('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
+		if ( event.button == 0 ) {
+			if ( my_text_index != -1 ) {
+				$('#my-text').val(my_text_previous);
+				send(1);
+				my_text_previous = '';
+				$('#my-text').val('').height(textarea_height);
+			}
+			my_text_index = parseInt($(this).attr('name'));
+			my_text_previous = $(this).html().replace(/<br>/g,'\n');
+			$('#my-text').val(my_text_previous).focus().trigger('input');
+		}
+	});
+
+	$('#pre-roll').on('dblclick',function(event){
+		if ( event.button == 0 ) {
+			$('#my-text').val(get_current_line()).focus().trigger('input');
+		}
+	});
+
+	$(document).on('keydown',function(event){
+		if ( event.target == $('#pre-roll').get(0) ) {
+			switch ( event.key ) {
+			case 'F1' :
+				event.preventDefault();
+				$('#my-text').val(get_current_line()); send(1); $('#my-text').val('');
+				break;
+			case 'Escape' :
+				event.preventDefault();
+				$('#pre-roll').val('');
+				break;
+			}
+		}
+		else if ( event.target == $('#my-text')[0] ) {
+			switch ( event.key ) {
+			case 'Enter' :
+				if ( event.shiftKey ) {
+					var num = $('#my-text').val().split('\n').length+1;
+					$('#my-text').prop('rows',num);
+				}
+				else {
+					event.preventDefault();
+					send(1);
+					if ( $('#speech').is(':checked') == true ) {
+						const uttr = new SpeechSynthesisUtterance()
+						uttr.text = $('#my-text').val();
+						uttr.lang = $('input[name="recognition-lang"]:checked').attr('id').substring("recognition-lang-".length);
+						speechSynthesis.speak(uttr);
+					}
+					$('#my-text').val('').height(textarea_height);
+					my_text_index = -1;
+					my_text_previous = '';
+				}
+				break;
+			case 'Escape' :
+				event.preventDefault();
+				if ( my_text_index != -1 ) {
+					$('#my-text').val(my_text_previous);
+					send(1);
+					my_text_previous = '';
+				}
+				$('#my-text').val('').height(textarea_height);
+				my_text_index = -1;
+				break;
+			}
+		}
+		else if ( event.target == $('#host')[0] && event.key == 'Enter' ) {
+			$('#host').blur();
+			if ( host.length == 0 ) {
+				var s = $('#host').val();
+				if ( s.length == 0 ) { alert("まずサーバアドレスを記入して下さい。"); return; }
+				if ( /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(s) != true ) { alert("サーバアドレスが間違ってます。"+s.length); return; }
+				host = s;
+			}
+			open(host);
+		}
+		switch ( event.key ) {
+			case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
+			case 'F2' : event.preventDefault(); append_input($('#key-2').val()); break;
+			case 'F3' : event.preventDefault(); append_input($('#key-3').val()); break;
+			case 'F4' : event.preventDefault(); append_input($('#key-4').val()); break;
+			case 'F5' : event.preventDefault(); append_input($('#key-5').val()); break;
+			case 'F6' : event.preventDefault(); append_input($('#key-6').val()); break;
+			case 'F7' : event.preventDefault(); append_input($('#key-7').val()); break;
+			case 'F8' : event.preventDefault(); append_input($('#key-8').val()); break;
+			case 'F9' : event.preventDefault(); append_input($('#key-9').val()); break;
+		}
+	});
+
+	$('#shortcut-load').on('click',function(event){ $('#shortcut-load-file').click(); });
+	$('#shortcut-load-file').on('change',function(){
+		if ( this.files.length == 1 ) {
+			var blob = this.files[0];
+			var reader = new FileReader();
+			reader.readAsText(blob);
+			reader.onload = function(){
+				reader.result.split(/\r*\n/).forEach(a=>{
+					var c = a.split(/\s/);
+					switch (c[0]) {
+						case 'F1' : $('#key-1').val(c[1]); break;
+						case 'F2' : $('#key-2').val(c[1]); break;
+						case 'F3' : $('#key-3').val(c[1]); break;
+						case 'F4' : $('#key-4').val(c[1]); break;
+						case 'F5' : $('#key-5').val(c[1]); break;
+						case 'F6' : $('#key-6').val(c[1]); break;
+						case 'F7' : $('#key-7').val(c[1]); break;
+						case 'F8' : $('#key-8').val(c[1]); break;
+						case 'F9' : $('#key-9').val(c[1]); break;
+					}
+				});
+				$('#shortcut-load-file').val('');
+				$('#shortcut-load').blur();
+			};
+		}
+	});
+	$('#shortcut-save').click(async function(){
+		let a = [];
+		a.push(`F1 ${$('#key-1').val()}\n`);
+		a.push(`F2 ${$('#key-2').val()}\n`);
+		a.push(`F3 ${$('#key-3').val()}\n`);
+		a.push(`F4 ${$('#key-4').val()}\n`);
+		a.push(`F5 ${$('#key-5').val()}\n`);
+		a.push(`F6 ${$('#key-6').val()}\n`);
+		a.push(`F7 ${$('#key-7').val()}\n`);
+		a.push(`F8 ${$('#key-8').val()}\n`);
+		a.push(`F9 ${$('#key-9').val()}\n`);
+		const b = new Blob(a,{type:'text/plain'});
+		const f = await window.showSaveFilePicker({suggestedName:'shortcut.txt'});	// ファイル保存ダイアログを表示して FileSystemFileHandle オブジェクトを取得
+		const s = await f.createWritable();	// FileSystemWritableFileStream オブジェクトを取得
+		await s.write(b);	// テキストデータをファイルに書き込む
+		await s.close();	// ファイルを閉じる
+		$(this).blur();
+	});
+
+	switch ( location.protocol ) {
+		case 'file:':
+			host = "";
+			break;
+		case 'https:': 
+		case 'http:': 
+			host = location.host;
+			if ( location.hostname == 'localhost' || location.hostname == '127.0.0.1' ) { is_localhost = true; }
+			open(host);
+			break;
+	}
+	if ( is_localhost == true || location.protocol == 'https:' ) {
+		fetch_token('./tools/token.json').then((ok)=>{
+			if (ok) {
+				if ( 'ami-voice' in token ) { $('#recognition-engine').append('<option value="1">Ami Voice</option>'); }
+			}
+			$('#recognition-engine').trigger('change');
+		});
+	}
+	else { $('#voice-recognition').hide(); }
+});
+</script>
+</body>
+</html>
