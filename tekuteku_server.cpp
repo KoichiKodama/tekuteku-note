@@ -25,6 +25,11 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
+#ifdef USE_SSL
+	#include <boost/beast/ssl.hpp>
+	#include <boost/asio/ssl/context.hpp>
+	#include <boost/beast/websocket/ssl.hpp>
+#endif
 #include <boost/format.hpp>
 #include <json.hpp>
 #include <k_time.hpp>
@@ -35,7 +40,13 @@
 #pragma comment(lib,"ws2_32.lib")
 #pragma comment(lib,"iphlpapi.lib")
 
-static std::string m_version = "build 2023-10-29";
+#ifndef USE_SSL
+static int DEFAULT_PORT = 80;
+#else
+static int DEFAULT_PORT = 443;
+#endif
+
+static std::string m_version = "build 2024-02-14";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
@@ -124,8 +135,14 @@ bool enum_network( std::vector<network_t>& result ) {
 }
 
 using socket_t = boost::asio::ip::tcp::socket;
-using tcp_stream_t = boost::beast::tcp_stream;
-using websocket_stream_t = boost::beast::websocket::stream<boost::beast::tcp_stream>;
+#ifdef USE_SSL
+	using tcp_stream_t = boost::beast::ssl_stream<boost::beast::tcp_stream>;
+	using websocket_stream_t = boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>;
+#else
+	using tcp_stream_t = boost::beast::tcp_stream;
+	using websocket_stream_t = boost::beast::websocket::stream<boost::beast::tcp_stream>;
+#endif
+
 struct taker_info_t {
 	taker_info_t() : is_readonly(false),is_init(false) {};
 	int num;
@@ -145,7 +162,7 @@ struct whiteboard_element_t {
 std::string m_host_url;
 std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> m_takers;
 std::vector<whiteboard_element_t> m_whiteboard;
-boost::asio::ip::port_type m_port = 80;
+boost::asio::ip::port_type m_port = DEFAULT_PORT;
 std::vector<network_t> m_servers;
 std::mutex m_mutex;
 int num_connected = 0;	// 延べ接続テイカー
@@ -245,7 +262,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 					r["server"] = nlohmann::json::array();
 					for (auto ii=m_servers.begin();ii!=m_servers.end();ii++) {
 						const std::string a = (*ii).address.to_string();
-						r["server"].push_back(( m_port == 80 ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
+						r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 					}
 					boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 					boost::system::error_code ec;
@@ -256,7 +273,9 @@ void broadcast_status( boost::asio::yield_context yield ) {
 					else rc = true;
 				}
 			}
+			#ifndef USE_SSL
 			if ( rc == false ) { if ( spawn_client(m_host_url) == false ) log("error spawn_client\n"); }
+			#endif
 		}
 	}
 }
@@ -278,7 +297,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 		r["server"] = nlohmann::json::array();
 		for (auto ii=m_servers.begin();ii!=m_servers.end();ii++) {
 			const std::string a = (*ii).address.to_string();
-			r["server"].push_back(( m_port == 80 ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
+			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
 		boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 		p_ws->async_write(b.data(),yield[ec]); debug_async_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
@@ -398,27 +417,17 @@ boost::beast::string_view mime_type( boost::beast::string_view path ) {
 		if ( pos == boost::beast::string_view::npos ) return boost::beast::string_view{};
 		return path.substr(pos);
 	}();
-	if ( boost::beast::iequals(ext,".htm" )) return "text/html";
 	if ( boost::beast::iequals(ext,".html")) return "text/html";
-	if ( boost::beast::iequals(ext,".php" )) return "text/html";
 	if ( boost::beast::iequals(ext,".css" )) return "text/css";
 	if ( boost::beast::iequals(ext,".txt" )) return "text/plain";
 	if ( boost::beast::iequals(ext,".js"  )) return "application/javascript";
 	if ( boost::beast::iequals(ext,".json")) return "application/json";
-	if ( boost::beast::iequals(ext,".xml" )) return "application/xml";
-	if ( boost::beast::iequals(ext,".swf" )) return "application/x-shockwave-flash";
-	if ( boost::beast::iequals(ext,".flv" )) return "video/x-flv";
 	if ( boost::beast::iequals(ext,".png" )) return "image/png";
-	if ( boost::beast::iequals(ext,".jpe" )) return "image/jpeg";
-	if ( boost::beast::iequals(ext,".jpeg")) return "image/jpeg";
 	if ( boost::beast::iequals(ext,".jpg" )) return "image/jpeg";
 	if ( boost::beast::iequals(ext,".gif" )) return "image/gif";
 	if ( boost::beast::iequals(ext,".bmp" )) return "image/bmp";
 	if ( boost::beast::iequals(ext,".ico" )) return "image/vnd.microsoft.icon";
-	if ( boost::beast::iequals(ext,".tiff")) return "image/tiff";
-	if ( boost::beast::iequals(ext,".tif" )) return "image/tiff";
 	if ( boost::beast::iequals(ext,".svg" )) return "image/svg+xml";
-	if ( boost::beast::iequals(ext,".svgz")) return "image/svg+xml";
 	return "application/text";
 }
 
@@ -454,6 +463,9 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	boost::asio::ip::tcp::socket& socket = boost::beast::get_lowest_layer(stream).socket();
 	boost::asio::ip::tcp::socket::endpoint_type ep = socket.remote_endpoint(ec);
 	boost::beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(session_timeout));
+	#ifdef USE_SSL
+    stream.async_handshake(boost::asio::ssl::stream_base::server,yield[ec]);
+	#endif
 	boost::beast::flat_buffer buffer;
 	boost::beast::http::request<boost::beast::http::string_body> req;
 
@@ -533,6 +545,21 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	return send(std::move(res));
 }
 
+#ifdef USE_SSL
+void exec_listen( boost::asio::io_context& ioc, boost::asio::ssl::context& ctx, boost::asio::ip::tcp::endpoint endpoint, boost::asio::yield_context yield ) {
+	boost::asio::ip::tcp::acceptor acceptor(ioc);
+	acceptor.open(endpoint.protocol());
+	acceptor.set_option(boost::asio::socket_base::reuse_address(true));
+	acceptor.bind(endpoint);
+	acceptor.listen(boost::asio::socket_base::max_listen_connections);
+	for (;;) {
+		socket_t socket(ioc);
+		boost::system::error_code ec;
+		acceptor.async_accept(socket,yield[ec]);
+		if (!ec) { boost::asio::spawn(ioc,std::bind(&exec_http_session,tcp_stream_t(std::move(socket),ctx),std::placeholders::_1),boost::asio::detached); }
+	}
+}
+#else
 void exec_listen( boost::asio::io_context& ioc, boost::asio::ip::tcp::endpoint endpoint, boost::asio::yield_context yield ) {
 	boost::asio::ip::tcp::acceptor acceptor(ioc);
 	acceptor.open(endpoint.protocol());
@@ -546,6 +573,7 @@ void exec_listen( boost::asio::io_context& ioc, boost::asio::ip::tcp::endpoint e
 		if (!ec) { boost::asio::spawn(ioc,std::bind(&exec_http_session,tcp_stream_t(std::move(socket)),std::placeholders::_1)); }
 	}
 }
+#endif
 
 class network_watchdog {
 public:
@@ -588,6 +616,23 @@ void terminate_server() {
 	log("service stopped\n");
 }
 
+#ifdef USE_SSL
+static boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12};
+void load_server_certificate( boost::asio::ssl::context& ctx ) {
+	// 証明書
+	// m_server_name の値は無関係。
+	// 証明書記載の common name でアクセスしないと NET::ERR_CERT_COMMON_NAME_INVALID となるので localhost で開いてはダメ。
+	// nii-odca4g7rsa.cer を emulsion-labo.physics.aichi-edu.ac.jp.cer の末尾にコピーすれば動作する。
+
+	ctx.set_password_callback([](std::size_t,boost::asio::ssl::context_base::password_purpose) { return "tekuteku"; });
+	ctx.use_private_key_file("./tekuteku-server.key",boost::asio::ssl::context::file_format::pem);
+	ctx.use_certificate_chain_file("./tekuteku-server.cer");
+	ctx.set_options( 
+		boost::asio::ssl::context::default_workarounds |
+		boost::asio::ssl::context::no_sslv2 );
+}
+#endif
+
 int main( int argc, char** argv ) {
 	try {
 		bool save_whiteboard = true;
@@ -613,17 +658,27 @@ int main( int argc, char** argv ) {
 			return 0;
 		}
 
+		#ifdef USE_SSL
+		load_server_certificate(ctx);
+		#endif
+
 		truncate_log();
 		log((boost::format("started %s\n") % m_version).str());
-		m_host_url = (boost::format("http://localhost:%d") % m_port).str();	// Chrome でマイク使用ブロックを解除できないので localhost を使用する。
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) { log("no network\n"); return 0; }
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s / %s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+		#ifndef USE_SSL
+		m_host_url = (boost::format("http://localhost:%d") % m_port).str();	// Chrome でマイク使用ブロックを解除できないので localhost を使用する。
 		if ( !spawn_client(m_host_url) ) throw std::runtime_error("spawn_client");
+		#endif
 
 		thread_r = std::move(std::thread([]{
 			auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
+			#ifndef USE_SSL
 			boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),ep,std::placeholders::_1));
+			#else
+			boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),std::ref(ctx),ep,std::placeholders::_1));
+			#endif
 			ioc_r.run();
 			m_takers.clear();
 		}));
