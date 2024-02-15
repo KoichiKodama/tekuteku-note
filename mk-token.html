@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang='ja'>
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="none">
+<title>トークン作成</title>
+<link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
+<meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
+</head>
+<body>
+<div class="container">
+	<div class="row justify-content-center"><div class="col-auto">
+	<div class="input-group m-2"><span class="input-group-text">key</span><input type="text" id="key" class="form-control" value="" style="width:50em;"/></div>
+	<div class="input-group m-2"><span class="input-group-text">username</span><input type="text" id="username" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">password</span><input type="text" id="password" class="form-control" value=""/></div>
+	<div class="input-group m-2"><button class="btn btn-secondary" id="save">保存</button></div>
+	</div></div>
+</div>
+<script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
+<script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
+<script src='./tools/sprintf-1.1.2/sprintf.min.js'></script>
+<script src='./tools/crypto-js-4.1.1.min.js'></script>
+<script type="text/javascript">
+'use strict';
+$('#save').click(async function(){
+	let key = sprintf('%32s',$('#key').val());
+	let user = CryptoJS.AES.encrypt($('#username').val(),key);
+	let pass = CryptoJS.AES.encrypt($('#password').val(),key);
+	let a = [`{ "username": "${user}", "password": "${pass}" }\n`];
+	const b = new Blob(a,{type:'text/plain'});
+	const f = await window.showSaveFilePicker({suggestedName:'ami-voice.json'});
+	const s = await f.createWritable();	
+	await s.write(b);
+	await s.close();
+});
+</script>
+</body>
+</html>
