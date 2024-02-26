@@ -624,7 +624,7 @@ void load_server_certificate( boost::asio::ssl::context& ctx ) {
 	// 証明書記載の common name でアクセスしないと NET::ERR_CERT_COMMON_NAME_INVALID となるので localhost で開いてはダメ。
 	// nii-odca4g7rsa.cer を emulsion-labo.physics.aichi-edu.ac.jp.cer の末尾にコピーすれば動作する。
 
-	ctx.set_password_callback([](std::size_t,boost::asio::ssl::context_base::password_purpose) { return "tekuteku"; });
+	ctx.set_password_callback([](std::size_t,boost::asio::ssl::context_base::password_purpose) { return ""; });
 	ctx.use_private_key_file("./tekuteku-server.key",boost::asio::ssl::context::file_format::pem);
 	ctx.use_certificate_chain_file("./tekuteku-server.cer");
 	ctx.set_options( 
