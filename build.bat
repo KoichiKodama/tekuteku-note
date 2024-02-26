@@ -22,10 +22,10 @@ exit /b
 setlocal
 echo release ssl
 set CXXFLAGS= -nologo -MD -Ox -EHac -bigobj -std:c++17
-set CXXINCLUDES= -I. -IC:\mnt\disk_z\usr\boost\boost_1_84_0 -I"C:\Program Files\openssl\include"
+set CXXINCLUDES= -I. -IC:\mnt\disk_z\usr\boost\boost_1_84_0 -I"C:\Program Files\OpenSSL\include"
 set CXXDEFS= -DUSE_SSL -DNDEBUG -D_WINDOWS
 set LDFLAGS= -link -subsystem:windows -entry:mainCRTStartup
-set LIBS= -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0/stage/lib -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0\stage\lib -libpath:"C:\Program Files\openssl\lib"
+set LIBS= libssl.lib libcrypto.lib -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0/stage/lib -libpath:"C:\Program Files\OpenSSL\lib"
 cl %CXXFLAGS% %CXXINCLUDES% %CXXDEFS% tekuteku_server.cpp %LDFLAGS% %LIBS%
 mt -manifest utf-8.manifest -outputresource:tekuteku_server.exe;#1
 del tekuteku_server.obj
@@ -53,7 +53,7 @@ set CXXFLAGS= -nologo -MD -Ox -EHac -bigobj -std:c++17
 set CXXINCLUDES= -I. -IC:\mnt\disk_z\usr\boost\boost_1_84_0 -I"C:\Program Files\openssl\include"
 set CXXDEFS= -DUSE_SSL -DNDEBUG -D_WINDOWS
 set LDFLAGS= -link -subsystem:windows -entry:mainCRTStartup -debug -incremental:no -pdb:tekuteku_server_exe.pdb -opt:ref,noicf
-set LIBS= -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0/stage/lib -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0\stage\lib -libpath:"C:\Program Files\openssl\lib"
+set LIBS= libssl.lib libcrypto.lib -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0/stage/lib -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0\stage\lib -libpath:"C:\Program Files\openssl\lib"
 cl %CXXFLAGS% %CXXINCLUDES% %CXXDEFS% tekuteku_server.cpp %LDFLAGS% %LIBS%
 mt -manifest utf-8.manifest -outputresource:tekuteku_server.exe;#1
 del tekuteku_server.obj
