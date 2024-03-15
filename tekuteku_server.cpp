@@ -618,15 +618,15 @@ void terminate_server() {
 
 #ifdef USE_SSL
 static boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12};
-void load_server_certificate( boost::asio::ssl::context& ctx ) {
+void load_server_certificate( boost::asio::ssl::context& ctx, const std::string& fname_key, const std::string& fname_crt, const std::string& passwd ) {
 	// 証明書
 	// m_server_name の値は無関係。
 	// 証明書記載の common name でアクセスしないと NET::ERR_CERT_COMMON_NAME_INVALID となるので localhost で開いてはダメ。
 	// nii-odca4g7rsa.cer を emulsion-labo.physics.aichi-edu.ac.jp.cer の末尾にコピーすれば動作する。
 
-	ctx.set_password_callback([](std::size_t,boost::asio::ssl::context_base::password_purpose) { return ""; });
-	ctx.use_private_key_file("./tekuteku-server.key",boost::asio::ssl::context::file_format::pem);
-	ctx.use_certificate_chain_file("./tekuteku-server.cer");
+	ctx.set_password_callback([passwd](std::size_t,boost::asio::ssl::context_base::password_purpose) { return passwd.c_str(); });
+	ctx.use_private_key_file(fname_key.c_str(),boost::asio::ssl::context::file_format::pem);
+	ctx.use_certificate_chain_file(fname_crt.c_str());
 	ctx.set_options( 
 		boost::asio::ssl::context::default_workarounds |
 		boost::asio::ssl::context::no_sslv2 );
@@ -636,6 +636,7 @@ void load_server_certificate( boost::asio::ssl::context& ctx ) {
 int main( int argc, char** argv ) {
 	try {
 		bool save_whiteboard = true;
+		std::string ssl_key,ssl_crt,ssl_pwd;
 
 		argc--; argv++;
 		while ( argc != 0 ) {
@@ -644,6 +645,12 @@ int main( int argc, char** argv ) {
 				m_port = atoi(*argv);
 				m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
 				log(( boost::format("option port=%d\n") % m_port ).str());
+			}
+			else if ( strcmp(*argv,"--ssl") == 0 ) {
+				argc--; argv++; ssl_key = *argv;
+				argc--; argv++; ssl_crt = *argv;
+				argc--; argv++; ssl_pwd = *argv;
+				log(( boost::format("option --ssl %s %s\n") % ssl_key % ssl_crt ).str());
 			}
 			argc--; argv++;
 		}
@@ -659,7 +666,7 @@ int main( int argc, char** argv ) {
 		}
 
 		#ifdef USE_SSL
-		load_server_certificate(ctx);
+		load_server_certificate(ctx,ssl_key,ssl_crt,ssl_pwd);
 		#endif
 
 		truncate_log();
