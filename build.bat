@@ -35,9 +35,9 @@ exit /b
 :debug
 setlocal
 echo debug
-set CXXFLAGS= -nologo -MD -Ox -EHac -bigobj -std:c++17
+set CXXFLAGS= -nologo -MDd -Zi -EHac -bigobj -std:c++17
 set CXXINCLUDES= -I. -IC:\mnt\disk_z\usr\boost\boost_1_84_0
-set CXXDEFS= -DNDEBUG -D_WINDOWS
+set CXXDEFS= -D_WINDOWS
 set LDFLAGS= -link -subsystem:windows -entry:mainCRTStartup -debug -incremental:no -pdb:tekuteku_server_exe.pdb -opt:ref,noicf
 set LIBS= -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0/stage/lib
 cl %CXXFLAGS% %CXXINCLUDES% %CXXDEFS% tekuteku_server.cpp %LDFLAGS% %LIBS%

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-01-07</title>
+<title>てくてくノート ver 2024-03-25</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -15,7 +15,7 @@
 	<div class="col col-10">
 	<div class="input-group m-2"><input type="text" id="host" class="form-control fs-4 alert alert-warning" placeholder="ここにサーバアドレスを記入して'ENTER'を押して下さい。"/></div>
 	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;resize:vertical;" id="whiteboard-div">
-		<table class="table table-sm table-dark table-borderless align-left m-2 fs-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
+		<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
 	</div>
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-4" id="table-takers"><tbody></tbody></table>
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-4" rows="1" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
@@ -23,18 +23,43 @@
 	<div class="d-flex flex-row justify-content-start align-items-center">
 	<div class="col col-auto">
 	<div class="input-group m-2">
-		<input type="checkbox" value="" id="dark-mode" class="form-check-input mx-2"><label class="form-control-label" for="dark-mode">ダークモード</label>
-		<input class="form-check-input mx-2" type="checkbox" value="" id="readonly"><label class="form-control-label" for="readonly">見るだけ</label>
-		<input class="form-check-input mx-2" type="checkbox" value="" id="readonly-jimaku" style="display:none;"><label class="form-control-label" for="readonly-jimaku" style="display:none;">字幕表示</label>
-	</div>
-	</div>
-	<div class="col col-auto">
-	<div class="input-group m-2">
-		<button class="btn btn-sm btn-outline-secondary" id="font-size-small">小</button>
-		<span class="m-2">文字サイズ</span>
-		<button class="btn btn-sm btn-outline-secondary" id="font-size-large">大</button>
+		<div class="dropdown" id="screen-theme">
+			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">画面テーマ</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item" data-theme="dark">ダークモード</li>
+			<li class="dropdown-item" data-theme="lignt">ライトモード</li>
+			</ul>
+		</div>
+		<div class="dropdown" id="screen-mode">
+			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">機能選択</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item" data-mode="0">ノートテイク</li>
+			<li class="dropdown-item" data-mode="1">見るだけ</li>
+			<li class="dropdown-item" data-mode="2">見るだけ字幕</li>
+			</ul>
+		</div>
+		<div class="dropdown" id="font-size">
+			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">文字サイズ</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item" data-fs="fs-1">最大</li>
+			<li class="dropdown-item" data-fs="fs-2">大</li>
+			<li class="dropdown-item" data-fs="fs-3">中</li>
+			<li class="dropdown-item" data-fs="fs-4">小</li>
+			<li class="dropdown-item" data-fs="fs-5">最小</li>
+			</ul>
+		</div>
+		<div class="dropdown" id="translate-lang">
+			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">翻訳なし</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item text-bg-primary" data-lang="none">翻訳なし</li>
+			<li class="dropdown-item" data-lang="en">English</li>
+			<li class="dropdown-item" data-lang="zh-CN">Chinese</li>
+			<li class="dropdown-item" data-lang="ko">Korean</li>
+			</ul>
+		</div>
 	</div></div>
 	</div>
+
 	<div id="xxx"></div>
 	</div>
 	<div class="col-2 taker" id="shortcut">
@@ -110,9 +135,11 @@
 <script type="text/javascript">
 'use strict';
 
-var screen_theme = "light";	// 画面モード : "light"/"dark"
-var screen_mode = 0;		// 0:標準, 1:見るだけ, 2:字幕表示
-var whiteboard_font_size = 2;
+var screen_mode = 0; // 0:標準, 1:見るだけ, 2:字幕表示
+var translate_lang_to = 'none';
+var auto_scroll_whiteboard = true;
+var auto_scroll_pre_roll = true;
+var textarea_height = 0;
 
 var socket;
 var connected = false;
@@ -121,12 +148,8 @@ var host = "";
 var id;	// 自分自身の識別子
 var dialog;
 var whiteboard = [];
-var auto_scroll_whiteboard = true;
-var auto_scroll_pre_roll = true;
 var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
 var my_text_previous = '';
-var textarea_height = 0;
-
 var recognizer = null;
 var recognition_local = false;
 var recognized_text_list = [];
@@ -445,6 +468,20 @@ function close() {
 	connected = false;
 }
 
+function translate_text(text) {
+	if ( translate_lang_to == 'none' ) return text;
+	let api_key = 'AIzaSyAbNL8Pf1C4nOWlUBHSVV4JqRll8bJgDCQ';
+	let text_translated = text;
+	$.ajax({
+		method: 'POST',
+		async: false, 
+		url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(text)+"&source=ja&target="+translate_lang_to,
+		success: function(result,status_code,xhr) { text_translated = decodeURI(result.data.translations[0].translatedText); },
+		error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
+	});
+	return text_translated;
+}
+
 function receive(event) {
 	var responce = JSON.parse(event.data);
 	switch ( responce.type ) {
@@ -466,12 +503,13 @@ function receive(event) {
 		let t = $('#whiteboard-table > tr > td');
 		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning');
 		responce.whiteboard.forEach((c)=>{
+			let s = translate_text(c.text).replace(/\n/g,'<br>');
 			if ( c.i < t.length ) {
 				let x = t.eq(c.i);
-				x.attr('name',c.i).html(c.text.replace(/\n/g,'<br>'));
+				x.attr('name',c.i).html(s);
 				if ( c.edit == 1 ) { x.addClass('text-warning'); } else { x.removeClass('text-warning'); }
 			}
-			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',c.i,( c.edit == 1 ? 'class="text-warning"' : '' ),c.text.replace(/\n/g,'<br>'))); }
+			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',c.i,( c.edit == 1 ? 'class="text-warning"' : '' ),s)); }
 		});
 		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div').scrollTop($('#whiteboard-div')[0].scrollHeight);
 		$('#table-takers > tbody').empty();
@@ -479,9 +517,9 @@ function receive(event) {
 			if ( c.id == id ) return;
 			var text = ( !('text' in c ) ? "見てるだけ" : c.text.replace(/\n/g,'<br>') );
 			if ( screen_mode != 0 && text == "見てるだけ" ) return;
-			$('#table-takers > tbody').append(( screen_mode != 0 ? 
-				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text) : 
-				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td style="width:20ch;">%s</td><td class="teku">%s</td></tr>',c.num,c.id,text) 
+			$('#table-takers > tbody').append(( screen_mode == 0 ? 
+				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td style="width:20ch;">%s</td><td class="teku">%s</td></tr>',c.num,c.id,text) : 
+				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text) 
 			));
 		});
 		$('td.teku').css('background-image',mk_guide());
@@ -517,45 +555,38 @@ function get_current_line() {
 }
 
 function expand_whiteboard() { $('#whiteboard-div').height(Math.floor($('#whiteboard-div').height()+($(window).height()-($('#xxx').offset().top+$('#xxx').height())))); }
-function set_font_size( size ) {
-	whiteboard_font_size = size;
-	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(sprintf('fs-%d',whiteboard_font_size));
+
+function set_font_size( font_size ) {
+	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(font_size);
+	$('#font-size li').removeClass('text-bg-primary').filter(sprintf('[data-fs="%s"]',font_size)).addClass('text-bg-primary');
 }
-function set_theme(theme) { document.documentElement.setAttribute('data-bs-theme',theme); }
+
+function set_theme(theme) {
+	document.documentElement.setAttribute('data-bs-theme',theme);
+	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
+}
+
 function set_screen_mode(mode) {
 	screen_mode = mode;
 	switch(mode) {
 	case 0 :
-		$('#dark-mode').prop('disabled',false);
 		$('#whiteboard-exclude').remove();
 		$('#host').show();
 		$('.taker').show();
 		$('div.row > div.col:first').addClass('col-10');
-		$('#dark-mode').trigger('change');
-		$('#readonly').prop('checked',false);
-		$('#readonly-jimaku').prop('checked',false);
-		$('#readonly-jimaku, #readonly-jimaku + label').hide();
 		break;
 	case 1 :
-		$('#dark-mode').prop('disabled',true);
 		$('#whiteboard-exclude').remove();
 		$('#host').show();
 		$('.taker').hide();
 		$('div.row > div.col:first').removeClass('col-10');
 		set_theme('dark');
-		$('#readonly').prop('checked',true);
-		$('#readonly-jimaku').prop('checked',false);
-		$('#readonly-jimaku, #readonly-jimaku + label').show();
 		break;
 	case 2 :
-		$('#dark-mode').prop('disabled',true);
 		$('#host').hide();
 		$('.taker').hide();
 		$('div.row > div.col:first').removeClass('col-10');
 		set_theme('dark');
-		$('#readonly').prop('checked',true);
-		$('#readonly-jimaku').prop('checked',true);
-		$('#readonly-jimaku, #readonly-jimaku + label').show();
 		// div の reisze を catch するには observer が必要なので、下記の簡便な方法で代用する。
 		const jimaku_lines = 4.5;
 		let line_height_str = $('#whiteboard-table').css('line-height');
@@ -563,6 +594,7 @@ function set_screen_mode(mode) {
 		if ( h_exclude > 0 ) $('#whiteboard-div').before(sprintf('<div class="input-group m-2 bg-dark text-white" style="height:%dpx;" id="whiteboard-exclude">',h_exclude));
 		break;
 	}
+	$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',mode)).addClass('text-bg-primary');
 }
 
 function shortcut_from_cookie() {
@@ -580,8 +612,7 @@ function shortcut_from_cookie() {
 			case 'F7' : $('#key-7').val(val); break;
 			case 'F8' : $('#key-8').val(val); break;
 			case 'F9' : $('#key-9').val(val); break;
-			case 'screen-theme' : $('#dark-mode').prop('checked',( val == 'dark' ? true : false )); set_theme(val); break;
-//			case 'font-size' : set_font_size(parseInt(val)); break;
+			case 'screen-theme' : set_theme(val); break;
 			case 'screen-mode' : set_screen_mode(parseInt(val)); break;
 		}
 	});
@@ -597,19 +628,48 @@ function shortcut_to_cookie() {
 	document.cookie = 'F7='+encodeURI($('#key-7').val());
 	document.cookie = 'F8='+encodeURI($('#key-8').val());
 	document.cookie = 'F9='+encodeURI($('#key-9').val());
-	document.cookie = 'screen-theme='+encodeURI(( $('#dark-mode').prop('checked') == true ? 'dark' : 'light' ));
+	document.cookie = 'screen-theme='+encodeURI(document.documentElement.getAttribute('data-bs-theme').toString());
 	document.cookie = 'screen-mode='+encodeURI(screen_mode.toString());
-//	document.cookie = 'font-size='+encodeURI(whiteboard_font_size.toString());
 }
 
 $(document).ready( function(){
+	set_theme('dark');
+	set_screen_mode(0);
+	set_font_size('fs-2');
 	shortcut_from_cookie();
 	textarea_height = $('#my-text').height();
 	expand_whiteboard();
+
 	$(window).on('beforeunload pagehide',function(){ close(); shortcut_to_cookie(); });
 	$(window).on("orientationchange resize",expand_whiteboard);
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
+
+	$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) { set_theme($(clickEvent.target).data('theme')); } });
+	$('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
+		if ( clickEvent?.target ) {
+			set_screen_mode(parseInt($(clickEvent.target).data('mode')));
+			expand_whiteboard();
+			send(0);
+		}
+	});
+	$('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) { set_font_size($(clickEvent.target).data('fs')); } });
+//	$('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
+//		if ( clickEvent?.target ) {
+//			let x = $(clickEvent.target);
+//			$('#translate-lang li').removeClass('text-bg-primary');
+//			x.addClass('text-bg-primary');
+//			let lang = x.data('lang');
+//			if ( lang != translate_lang_to ) {
+//				translate_lang_to = lang;
+//				let t = $('#whiteboard-table > tr > td');
+//				whiteboard.forEach((c)=>{
+//					let s = translate_text(c.text).replace(/\n/g,'<br>');
+//					if ( c.i < t.length ) { t.eq(c.i).attr('name',c.i).html(s); }
+//				});
+//			}
+//		}
+//	});
 
 	$('#dictionary-load').on('click',function(){ $('#dictionary-load-file').click(); });
 	$('#dictionary-load-file').on('change',function(){
@@ -633,20 +693,6 @@ $(document).ready( function(){
 	$('#recognition-engine').on('change',set_recognition_engine);
 	$('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
 	$('input[name="recognition-lang"]').on('change',(event)=>{ recognizer.set_lang($('input[name="recognition-lang"]:checked').attr('id').substring("recognition-lang-".length)); });
-
-	$('#dark-mode').on('change',function(){ set_theme( $('#dark-mode').prop('checked') == true ? 'dark' : 'light' ); });
-	$('#font-size-small').on('click',function(event){ set_font_size(( whiteboard_font_size == 5 ? 5 : whiteboard_font_size+1 )); });
-	$('#font-size-large').on('click',function(event){ set_font_size(( whiteboard_font_size == 1 ? 1 : whiteboard_font_size-1 )); });
-	$('#readonly').on('change',function(event){
-		set_screen_mode(( $('#readonly').prop('checked') == true ? 1 : 0 ));
-		expand_whiteboard();
-		send(0);
-	});
-	$('#readonly-jimaku').on('change',function(event){
-		set_screen_mode(( $('#readonly-jimaku').prop('checked') == true ? 2 : 1 ));
-		expand_whiteboard();
-		send(0);
-	});
 
 	$('#my-text').on('input',function(event){
 		let o = $('#my-text')[0];
