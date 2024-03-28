@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-03-26</title>
+<title>てくてくノート ver 2024-03-28</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -50,7 +50,7 @@
 				</ul>
 			</div>
 			<div class="dropdown" id="translate-lang">
-				<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none" disabled>翻訳なし</button>
+				<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">翻訳なし</button>
 				<ul class="dropdown-menu">
 				<li class="dropdown-item text-bg-primary" data-lang="none">翻訳なし</li>
 				<li class="dropdown-item" data-lang="en">English</li>
@@ -168,7 +168,7 @@ class recognized_text {
 
 function sanitize(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&apos;').replace(/"/g,'&quot;'); }
 
-var token = {};	// 音声認識エンジン用トークン一覧
+var token = {};	// トークン一覧(AmiVoice,GoogleTranslate)
 
 async function fetch_token( token_name ) {
 	try {
@@ -467,18 +467,21 @@ function close() {
 	connected = false;
 }
 
-function translate_text(text) {
-	if ( translate_lang_to == 'none' ) return text;
-	let api_key = '';
-	let text_translated = text;
-	$.ajax({
-		method: 'POST',
-		async: false, 
-		url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(text)+"&source=ja&target="+translate_lang_to,
-		success: function(result,status_code,xhr) { text_translated = decodeURI(result.data.translations[0].translatedText); },
-		error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
-	});
-	return text_translated;
+function translate_text(c) {
+	// c : whiteboard の要素 ( i,text,edit )
+	let api_key = token['google-translate'].key;
+	if ( translate_lang_to == 'none' ) { return c.text; }
+	if (!( translate_lang_to in c )) {
+		console.log('google');
+		$.ajax({
+			method: 'POST',
+			async: false, 
+			url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
+			success: function(result,status_code,xhr) { c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); },
+			error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
+		});
+	}
+	return c[translate_lang_to];
 }
 
 function receive(event) {
@@ -502,13 +505,14 @@ function receive(event) {
 		let t = $('#whiteboard-table > tr > td');
 		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning');
 		responce.whiteboard.forEach((c)=>{
-			let s = translate_text(c.text).replace(/\n/g,'<br>');
-			if ( c.i < t.length ) {
-				let x = t.eq(c.i);
-				x.attr('name',c.i).html(s);
-				if ( c.edit == 1 ) { x.addClass('text-warning'); } else { x.removeClass('text-warning'); }
+			let o = whiteboard[c.i];
+			let s = translate_text(o).replace(/\n/g,'<br>');
+			if ( o.i < t.length ) {
+				let x = t.eq(o.i);
+				x.attr('name',o.i).html(s);
+				if ( o.edit == 1 ) { x.addClass('text-warning'); } else { x.removeClass('text-warning'); }
 			}
-			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',c.i,( c.edit == 1 ? 'class="text-warning"' : '' ),s)); }
+			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',o.i,( o.edit == 1 ? 'class="text-warning"' : '' ),s)); }
 		});
 		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div').scrollTop($('#whiteboard-div')[0].scrollHeight);
 		$('#table-takers > tbody').empty();
@@ -663,22 +667,22 @@ $(document).ready( function(){
 		}
 	});
 	$('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) { set_font_size($(clickEvent.target).data('fs')); } });
-//	$('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
-//		if ( clickEvent?.target ) {
-//			let x = $(clickEvent.target);
-//			$('#translate-lang li').removeClass('text-bg-primary');
-//			x.addClass('text-bg-primary');
-//			let lang = x.data('lang');
-//			if ( lang != translate_lang_to ) {
-//				translate_lang_to = lang;
-//				let t = $('#whiteboard-table > tr > td');
-//				whiteboard.forEach((c)=>{
-//					let s = translate_text(c.text).replace(/\n/g,'<br>');
-//					if ( c.i < t.length ) { t.eq(c.i).attr('name',c.i).html(s); }
-//				});
-//			}
-//		}
-//	});
+	$('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
+		if ( clickEvent?.target ) {
+			let x = $(clickEvent.target);
+			$('#translate-lang li').removeClass('text-bg-primary');
+			x.addClass('text-bg-primary');
+			let lang = x.data('lang');
+			if ( lang != translate_lang_to ) {
+				translate_lang_to = lang;
+				let t = $('#whiteboard-table > tr > td');
+				whiteboard.forEach((c)=>{
+					let s = translate_text(c).replace(/\n/g,'<br>');
+					if ( c.i < t.length ) { t.eq(c.i).attr('name',c.i).html(s); }
+				});
+			}
+		}
+	});
 
 	$('#dictionary-load').on('click',function(){ $('#dictionary-load-file').click(); });
 	$('#dictionary-load-file').on('change',function(){
@@ -854,15 +858,15 @@ $(document).ready( function(){
 			open(host);
 			break;
 	}
-	if ( is_localhost == true || location.protocol == 'https:' ) {
-		fetch_token('./tools/token.json').then((ok)=>{
-			if (ok) {
-				if ( 'ami-voice' in token ) { $('#recognition-engine').append('<option value="1">Ami Voice</option>'); }
-			}
+	fetch_token('./tools/token.json').then((ok)=>{
+		if (!ok) return;
+		if (( is_localhost == true || location.protocol == 'https:' )&&( 'ami-voice' in token )) {
+			$('#recognition-engine').append('<option value="1">Ami Voice</option>');
 			$('#recognition-engine').trigger('change');
-		});
-	}
-	else { $('#voice-recognition').hide(); }
+		}
+		else { $('#voice-recognition').hide(); }
+		if (!( 'google-translate' in token )) { $('#translate-lang').hide() }
+	});
 });
 </script>
 </body>
