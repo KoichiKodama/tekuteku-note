@@ -1,5 +1,11 @@
 #
+# 使い方
+# set LANG=ja_JP.UTF8
+# gawk -f mk-test.awk i.txt > test.ps1
+# ps test.ps1
+#
 # キー入力を受け取る側は IME をオフにしないと文字化けしたり改行しなかったりする。
+# CRLF->LF, ” の変換
 #
 BEGIN{
 	print "Add-Type -AssemblyName System.Windows.Forms";
