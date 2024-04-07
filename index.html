@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-04-02</title>
+<title>てくてくノート ver 2024-04-07</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -139,6 +139,7 @@ var translate_lang_to = 'none';
 var auto_scroll_whiteboard = true;
 var auto_scroll_pre_roll = true;
 var textarea_height = 0;
+var translate_text = function(c){ return c.text; }
 
 var socket;
 var connected = false;
@@ -465,23 +466,6 @@ function close() {
 	socket = undefined;
 	$('#host').val('サーバとの接続が切断されました。再接続して下さい。').removeClass('alert-success').addClass('alert-warning');
 	connected = false;
-}
-
-function translate_text(c) {
-	// c : whiteboard の要素 ( i,text,edit )
-	let api_key = token['google-translate'].key;
-	if ( translate_lang_to == 'none' ) { return c.text; }
-	if (!( translate_lang_to in c )) {
-		console.log('google');
-		$.ajax({
-			method: 'POST',
-			async: false, 
-			url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
-			success: function(result,status_code,xhr) { c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); },
-			error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
-		});
-	}
-	return c[translate_lang_to];
 }
 
 function receive(event) {
@@ -858,6 +842,10 @@ $(document).ready( function(){
 			open(host);
 			break;
 	}
+
+	translate_text = function(c) { return c.text; };
+	$('#translate-lang').hide();
+
 	fetch_token('./tools/token.json').then((ok)=>{
 		if (!ok) return;
 		if (( is_localhost == true || location.protocol == 'https:' )&&( 'ami-voice' in token )) {
@@ -865,7 +853,23 @@ $(document).ready( function(){
 			$('#recognition-engine').trigger('change');
 		}
 		else { $('#voice-recognition').hide(); }
-		if (!( 'google-translate' in token )) { $('#translate-lang').hide() }
+		if ( 'google-translate' in token ) {
+			translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
+				let api_key = token['google-translate'].key;
+				if ( translate_lang_to == 'none' ) { return c.text; }
+				if (!( translate_lang_to in c )) {
+					$.ajax({
+						method: 'POST',
+						async: false, 
+						url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
+						success: function(result,status_code,xhr) { c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); },
+						error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
+					});
+				}
+				return c[translate_lang_to];
+			};
+			$('#translate-lang').show();
+		}
 	});
 });
 </script>
