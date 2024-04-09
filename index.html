@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-04-07</title>
+<title>てくてくノート ver 2024-04-09</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -353,7 +353,7 @@ function recognizer_default() {
 	function set_lang_(lang){ sprec.lang = lang; if ( state == 2 ) { sprec.stop(); } };
 	change_state(0);
 	return recognizer_;
-};
+}
 
 function recognition_control_update(state) {
 	switch (state) {
@@ -362,7 +362,7 @@ function recognition_control_update(state) {
 		case 2: { $('#recognition-control').prop('disabled',false).text('停止').val(2); break; }
 		case 9: { $('#recognition-control').prop('disabled',true).text('開始').val(9); break; }
 	}
-};
+}
 
 function set_recognition_engine() {
 	if (recognizer) { recognizer.stop(); recognizer = null; }
@@ -382,7 +382,7 @@ function set_recognition_engine() {
 	}
 	recognizer.on_change_state = recognition_control_update;
 	recognizer.status();
-};
+}
 
 function my_split(s,min_length,max_length,lang) {
 	var b = [];
@@ -847,29 +847,27 @@ $(document).ready( function(){
 	$('#translate-lang').hide();
 
 	fetch_token('./tools/token.json').then((ok)=>{
-		if (!ok) return;
-		if (( is_localhost == true || location.protocol == 'https:' )&&( 'ami-voice' in token )) {
-			$('#recognition-engine').append('<option value="1">Ami Voice</option>');
-			$('#recognition-engine').trigger('change');
+		if (ok) {
+			if ( 'ami-voice' in token ) { $('#recognition-engine').append('<option value="1">Ami Voice</option>'); }
+			if ( 'google-translate' in token ) {
+				translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
+					let api_key = token['google-translate'].key;
+					if ( translate_lang_to == 'none' ) { return c.text; }
+					if (!( translate_lang_to in c )) {
+						$.ajax({
+							method: 'POST',
+							async: false, 
+							url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
+							success: function(result,status_code,xhr) { c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); },
+							error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
+						});
+					}
+					return c[translate_lang_to];
+				};
+				$('#translate-lang').show();
+			}
 		}
-		else { $('#voice-recognition').hide(); }
-		if ( 'google-translate' in token ) {
-			translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
-				let api_key = token['google-translate'].key;
-				if ( translate_lang_to == 'none' ) { return c.text; }
-				if (!( translate_lang_to in c )) {
-					$.ajax({
-						method: 'POST',
-						async: false, 
-						url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
-						success: function(result,status_code,xhr) { c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); },
-						error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
-					});
-				}
-				return c[translate_lang_to];
-			};
-			$('#translate-lang').show();
-		}
+		if ( is_localhost == true || location.protocol == 'https:' ) { $('#recognition-engine').trigger('change'); } else { $('#voice-recognition').hide(); }
 	});
 });
 </script>
