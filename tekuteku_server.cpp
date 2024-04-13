@@ -46,7 +46,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-02-14";
+static std::string m_version = "build 2024-04-13";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
@@ -327,6 +327,15 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				nlohmann::json json_i = nlohmann::json::parse(s);
 				int status = json_i["status"];
 				std::lock_guard<std::mutex> lock(m_mutex);
+				if ( status == 8 ) {
+					if (true) {
+						log("==== whiteboard ====\n");
+						std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){ log(c.text+"\n"); });
+						log("==== whiteboard ====\n");
+					}
+					m_whiteboard.clear();
+					whiteboard_updated = true;
+				}
 				if ( status == 9 ) info.is_init = true;
 				if ( status == 2 ) {
 					// 新規音声認識セッション開始
@@ -596,14 +605,13 @@ private:
 network_watchdog wd; static std::thread thread_wd{};
 boost::asio::io_context ioc_w(1); static std::thread thread_w{};
 boost::asio::io_context ioc_r(1); static std::thread thread_r{};
-bool save_whiteboard = true;
 
 void terminate_server() {
 	stop_broadcast = true; SetEvent(request_broadcast);
 	wd.stop(); thread_wd.join();
 	ioc_r.stop(); thread_r.join();
 	ioc_w.stop(); thread_w.join();
-	if ( save_whiteboard == true ) {
+	if (true) {
 		log("==== whiteboard ====\n");
 		std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){ log(c.text+"\n"); });
 		log("==== whiteboard ====\n");
@@ -635,7 +643,6 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 
 int main( int argc, char** argv ) {
 	try {
-		bool save_whiteboard = true;
 		std::string ssl_key,ssl_crt,ssl_pwd;
 
 		argc--; argv++;

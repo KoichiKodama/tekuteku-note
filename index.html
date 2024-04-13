@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-04-09</title>
+<title>てくてくノート ver 2024-04-13</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -20,7 +20,7 @@
 		</div>
 		<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-4" id="table-takers"><tbody></tbody></table>
 		<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-4" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
-		<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-4" style="overflow:auto;height:20vh;resize:none;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
+		<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-4" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
 		<div class="d-flex flex-row justify-content-start align-items-center">
 		<div class="col col-auto">
 		<div class="input-group m-2">
@@ -94,6 +94,7 @@
 			<div class="input-group m-2"><input class="form-check-input mx-2" type="checkbox" value="" id="recognition-local"><label class="form-check-label" for="recognition-local">プリロールに出力</label></div>
 		</div>
 		<div class="input-group m-2"><input class="form-check-input mx-2" type="checkbox" value="" id="speech"><label class="form-check-label" for="speech">しゃべる</label></div>
+		<div class="input-group m-2"><button class="btn btn-outline-warning btn-sm mx-2" id="clear">テイクをクリア</button></div>
 	</div>
 </div>
 </div>
@@ -411,29 +412,11 @@ function my_split(s,min_length,max_length,lang) {
 	return b;
 }
 
-async function host_select(hosts) {
-	$('#dialog-select').empty();
-	hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').html(c).val(c)); });
-	let x = new bootstrap.Modal($('#dialog').get(0),{});
-	let dialog = new Promise((resolve)=>{
-		$('#dialog-button-ok').one('click',()=>{
-			host=$('#dialog-select > option:selected').val();
-			$('#host').val(`${host} に接続しました。このアドレスを他の人に通知して下さい。`).removeClass('alert-warning').addClass('alert-success');
-			x.hide();
-		});
-		$('#dialog')
-			.off('hidden.bs.modal')
-			.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
-		x.show();
-	});
-	const result = await dialog;
-}
-
 function send( status ) {
 	if ( connected == true ) {
 		var responce = new Object();
 		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),全データ要求(9)
-		if ( screen_mode == 0 ) {
+		if ( status != 8 && screen_mode == 0 ) {
 			responce.text = $('#my-text').val();
 			responce.text_index = my_text_index;
 			responce.voice_text = [];
@@ -468,6 +451,24 @@ function close() {
 	connected = false;
 }
 
+async function host_select(hosts) {
+	$('#dialog-select').empty();
+	hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
+	let x = new bootstrap.Modal($('#dialog').get(0),{});
+	let dialog = new Promise((resolve)=>{
+		$('#dialog-button-ok').one('click',()=>{
+			host=$('#dialog-select > option:selected').val();
+			$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
+			x.hide();
+		});
+		$('#dialog')
+			.off('hidden.bs.modal')
+			.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+		x.show();
+	});
+	const result = await dialog;
+}
+
 function receive(event) {
 	var responce = JSON.parse(event.data);
 	switch ( responce.type ) {
@@ -481,7 +482,7 @@ function receive(event) {
 			}
 			else { host = responce.server[0]; }
 		}
-		$('#host').val(`${host} に接続しました。このアドレスを他の人に通知して下さい。`).removeClass('alert-warning').addClass('alert-success');
+		$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
 		break;
 	case 1 :
 		responce.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
@@ -502,13 +503,9 @@ function receive(event) {
 		$('#table-takers > tbody').empty();
 		responce.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).forEach((c)=>{
 			if ( c.id == id ) return;
-			var text = ( !('text' in c ) ? "見てるだけ" : c.text.replace(/\n/g,'<br>') );
-			if ( screen_mode != 0 && text == "見てるだけ" ) return;
+			var text = ( !('text' in c ) ? "見るだけ" : c.text.replace(/\n/g,'<br>') );
+			if ( screen_mode != 0 && text == "見るだけ" ) return;
 			$('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text));
-//			$('#table-takers > tbody').append(( screen_mode == 0 ? 
-//				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td style="width:20ch;">%s</td><td class="teku">%s</td></tr>',c.num,c.id,text) : 
-//				sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text) 
-//			));
 		});
 		$('td.teku').css('background-image',mk_guide());
 		expand_whiteboard();	// table-takers の高さが変化するためここも必要。
@@ -642,6 +639,7 @@ $(document).ready( function(){
 	$(window).on("orientationchange resize",()=>{ set_screen_mode(); });
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
+	$('#clear').on('click',function(){ send(8); });
 
 	$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) { set_theme($(clickEvent.target).data('theme')); } });
 	$('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
@@ -843,7 +841,6 @@ $(document).ready( function(){
 			break;
 	}
 
-	translate_text = function(c) { return c.text; };
 	$('#translate-lang').hide();
 
 	fetch_token('./tools/token.json').then((ok)=>{
