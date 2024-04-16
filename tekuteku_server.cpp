@@ -1,11 +1,13 @@
-﻿#include <SDKDDKVer.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <shellapi.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <iphlpapi.h>
-
+﻿#ifdef _WINDOWS
+	#include <SDKDDKVer.h>
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+	#include <shellapi.h>
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+	#include <iphlpapi.h>
+#else
+#endif
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
@@ -13,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -33,12 +36,14 @@
 #include <boost/format.hpp>
 #include <json.hpp>
 #include <k_time.hpp>
-#include <tray.hpp>
 
-#pragma comment(lib,"user32.lib")
-#pragma comment(lib,"shell32.lib")
-#pragma comment(lib,"ws2_32.lib")
-#pragma comment(lib,"iphlpapi.lib")
+#ifdef _WINDOWS
+	#include <tray.hpp>
+	#pragma comment(lib,"user32.lib")
+	#pragma comment(lib,"shell32.lib")
+	#pragma comment(lib,"ws2_32.lib")
+	#pragma comment(lib,"iphlpapi.lib")
+#endif
 
 #ifndef USE_SSL
 static int DEFAULT_PORT = 80;
@@ -46,7 +51,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-04-13";
+static std::string m_version = "build 2024-04-16";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
@@ -84,12 +89,25 @@ bool log( const std::string& message, bool truncate = false ) {
 }
 
 bool spawn_client( const std::string& host_url ) {
-	return ( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 ? true : false );
+	#ifdef _WINDOWS
+		return ( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 ? true : false );
+	#else
+		return true;
+	#endif
 }
 
 struct address_ipv4_t {
 	address_ipv4_t() : c(0){};
-	address_ipv4_t( uint32_t c ) : c(c) {};
+	address_ipv4_t( uint32_t c, const std::string& byte_order = "net" ) : c(c) {
+		if ( byte_order == "host" ) {
+			union { uint32_t c; uint8_t b[4]; } x;
+			x.c = c;
+			b[0] = x.b[3];
+			b[1] = x.b[2];
+			b[2] = x.b[1];
+			b[3] = x.b[0];
+		}
+	};
 	address_ipv4_t( int a0, int a1, int a2, int a3 ) {
 		b[0] = (uint8_t)a0;
 		b[1] = (uint8_t)a1;
@@ -109,28 +127,22 @@ struct address_ipv4_t {
 struct network_t {
 	address_ipv4_t address;
 	address_ipv4_t mask;
-	address_ipv4_t broadcast;
+	address_ipv4_t broadcast; // = (net.address.c|~(net.mask.c))
 };
 
 bool enum_network( std::vector<network_t>& result ) {
 	result.clear();
-	PMIB_IPADDRTABLE pTable = NULL;
-	DWORD dwSize = 0;
-	if ( GetIpAddrTable(pTable,&dwSize,FALSE) != ERROR_INSUFFICIENT_BUFFER ) return false;
-	pTable = (PMIB_IPADDRTABLE)malloc(dwSize);
-	if ( GetIpAddrTable(pTable,&dwSize,FALSE) != NO_ERROR ) return false;
-	address_ipv4_t loopback(127,0,0,1);
-	for (auto i=0;i<pTable->dwNumEntries;i++) {
-		MIB_IPADDRROW& e = pTable->table[i];
-		if ( e.dwAddr == loopback.c ) continue;
-		if ( e.wType & MIB_IPADDR_DISCONNECTED ) continue;
+	boost::asio::io_context ioc;
+	boost::asio::ip::tcp::resolver resolver(ioc);
+	boost::asio::ip::tcp::resolver::query query(boost::asio::ip::host_name(),"");
+	boost::asio::ip::tcp::resolver::iterator ii=resolver.resolve(query);
+	while ( ii != boost::asio::ip::tcp::resolver::iterator() ) {
+		boost::asio::ip::address a = (ii++)->endpoint().address();
+		if ( a.is_v4() == false ) continue;
 		network_t net;
-		net.address.c = e.dwAddr;
-		net.mask.c = e.dwMask;
-		net.broadcast.c = (net.address.c|~(net.mask.c));//	GetIpAddrTable は正しい broadcast を戻さない。
+		net.address = address_ipv4_t(a.to_v4().to_uint(),"host"); // netmask 取得不可だが使用しないので OK
 		result.push_back(net);
 	}
-	free(pTable);
 	return true;
 }
 
@@ -166,11 +178,26 @@ boost::asio::ip::port_type m_port = DEFAULT_PORT;
 std::vector<network_t> m_servers;
 std::mutex m_mutex;
 int num_connected = 0;	// 延べ接続テイカー
-HANDLE request_broadcast;
-bool stop_broadcast = false;
 bool network_changed = false;
 bool whiteboard_updated = false;
 int whiteboard_voice_index = 0;
+
+std::vector<std::string> split( const std::string& x ) {
+	std::vector<std::string> l;
+	std::stringstream ss(x);
+	std::string e;
+	while ( std::getline(ss,e,'\n') ) { if (!e.empty()) l.push_back(e); }
+	return l;
+}
+
+void log_whiteboard() {
+	log("==== whiteboard ====\n");
+	std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){
+		const std::vector<std::string> l = split(c.text);
+		std::for_each(l.begin(),l.end(),[]( const auto& s ){ log(s+"\n"); });
+	});
+	log("==== whiteboard ====\n");
+}
 
 boost::beast::flat_buffer copy_to_buffer( const std::string& s ) {
 	boost::beast::flat_buffer b;
@@ -179,13 +206,39 @@ boost::beast::flat_buffer copy_to_buffer( const std::string& s ) {
 	return b;
 }
 
+class request_broadcast_event_t {
+public:
+	request_broadcast_event_t() : m_requested(false),m_stop(false) {};
+	virtual ~request_broadcast_event_t() {};
+	void set() {
+		{
+		std::lock_guard<std::mutex> lock(m_mtx);
+		m_requested = true;
+		}
+		m_cv.notify_all();
+	};
+	void stop() { m_stop = true; set(); };
+	bool wait() {
+		std::unique_lock<std::mutex> lock(m_mtx);
+		m_cv.wait(lock,[this]{ return m_requested; });
+		m_requested = false;
+		return ( m_stop == true ? false : true );
+	};
+	bool is_stopped() { return m_stop; };
+private:
+	bool m_requested;
+	bool m_stop;
+	std::mutex m_mtx;
+	std::condition_variable m_cv;
+};
+request_broadcast_event_t request_broadcast{};
+
 void broadcast_status( boost::asio::yield_context yield ) {
 	nlohmann::json j_whiteboard = nlohmann::json::array();
 	nlohmann::json j_whiteboard_full = nlohmann::json::array();
 
 	while (true) {
-//		boost::asio::post(boost::asio::get_associated_executor(yield),yield);
-		if ( WaitForSingleObject(request_broadcast,INFINITE) != WAIT_OBJECT_0 || stop_broadcast ) break;
+		if ( request_broadcast.wait() == false ) break;
 
 		std::map<std::shared_ptr<websocket_stream_t>,nlohmann::json> r_json;
 		nlohmann::json j_takers;
@@ -305,7 +358,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			std::lock_guard<std::mutex> lock(m_mutex);
 			m_takers[p_ws] = info;
 		}
-		SetEvent(request_broadcast);
+		request_broadcast.set();
 		log((boost::format("websocket session start %s total=%d\n") % info.id % m_takers.size()).str());
 
 		for (;;) {
@@ -328,11 +381,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				int status = json_i["status"];
 				std::lock_guard<std::mutex> lock(m_mutex);
 				if ( status == 8 ) {
-					if (true) {
-						log("==== whiteboard ====\n");
-						std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){ log(c.text+"\n"); });
-						log("==== whiteboard ====\n");
-					}
+					if (true) log_whiteboard();
 					m_whiteboard.clear();
 					whiteboard_updated = true;
 				}
@@ -401,22 +450,18 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 					}
 					whiteboard_updated = true;
 				}
-				SetEvent(request_broadcast);
+				request_broadcast.set();
 			}
 		}
 		log((boost::format("websocket session stop %s total=%d\n") % info.id % m_takers.size()).str());
 	}
-	catch ( boost::system::system_error& e ) {
-		log((boost::format("boost exception in exec_websocket_session %s : %s\n") % m_takers[p_ws].id % e.what()).str());
-	}
-	catch ( std::exception& e ) {
-		log((boost::format("exception in exec_websocket_session %s : %s\n") % m_takers[p_ws].id % e.what()).str());
-	}
+	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % m_takers[p_ws].id % e.what()).str()); }
+	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % m_takers[p_ws].id % e.what()).str()); }
 	if ( m_takers.find(p_ws) != m_takers.end() ) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_takers.erase(p_ws);
 	}
-	SetEvent(request_broadcast);
+	request_broadcast.set();
 }
 
 
@@ -584,6 +629,7 @@ void exec_listen( boost::asio::io_context& ioc, boost::asio::ip::tcp::endpoint e
 }
 #endif
 
+#ifdef _WINDOWS
 class network_watchdog {
 public:
 	network_watchdog() {
@@ -601,21 +647,20 @@ private:
 	OVERLAPPED o;
 	bool is_stopped;
 };
-
 network_watchdog wd; static std::thread thread_wd{};
+#endif
+
 boost::asio::io_context ioc_w(1); static std::thread thread_w{};
 boost::asio::io_context ioc_r(1); static std::thread thread_r{};
 
 void terminate_server() {
-	stop_broadcast = true; SetEvent(request_broadcast);
+	request_broadcast.stop();
+	#ifdef _WINDOWS
 	wd.stop(); thread_wd.join();
+	#endif
 	ioc_r.stop(); thread_r.join();
 	ioc_w.stop(); thread_w.join();
-	if (true) {
-		log("==== whiteboard ====\n");
-		std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){ log(c.text+"\n"); });
-		log("==== whiteboard ====\n");
-	}
+	if (true) log_whiteboard();
 	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
 	log((boost::format("debug_async_read = %d\n") % debug_async_read).str());
 	log((boost::format("debug_async_write = %d\n") % debug_async_write).str());
@@ -665,12 +710,14 @@ int main( int argc, char** argv ) {
 		//
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
 		//
+		#ifdef _WINDOWS
 		std::string tray_name = (boost::format("tekuteku-%04d") % m_port).str().c_str();
 		if ( tray_exist(tray_name.c_str()) == true ) {
 			log("stop due to multiple servers\n");
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
 			return 0;
 		}
+		#endif
 
 		#ifdef USE_SSL
 		load_server_certificate(ctx,ssl_key,ssl_crt,ssl_pwd);
@@ -680,7 +727,7 @@ int main( int argc, char** argv ) {
 		log((boost::format("started %s\n") % m_version).str());
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) { log("no network\n"); return 0; }
-		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s / %s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s\n") % net.address.to_string()).str()); });
 		#ifndef USE_SSL
 		m_host_url = (boost::format("http://localhost:%d") % m_port).str();	// Chrome でマイク使用ブロックを解除できないので localhost を使用する。
 		if ( !spawn_client(m_host_url) ) throw std::runtime_error("spawn_client");
@@ -697,12 +744,12 @@ int main( int argc, char** argv ) {
 			m_takers.clear();
 		}));
 
-		request_broadcast = CreateEvent(NULL,FALSE,FALSE,NULL);
 		thread_w = std::move(std::thread([]{
 			boost::asio::spawn(ioc_w,std::bind(&broadcast_status,std::placeholders::_1));
 			ioc_w.run();
 		}));
 
+		#ifdef _WINDOWS
 		thread_wd = std::move(std::thread([]{
 			while ( wd.wait() ) {
 				std::vector<network_t> l;
@@ -711,26 +758,28 @@ int main( int argc, char** argv ) {
 					m_servers.swap(l);
 					log("network changed\n");
 					if ( m_servers.empty() ) log("no network\n");
-					std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s / %s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+					std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s\n") % net.address.to_string()).str()); });
 					network_changed = true;
-					SetEvent(request_broadcast);
+					request_broadcast.set();
 				}
 				wd.start();
 			}
 		}));
-
 		if ( tray_init(tray_t("tekuteku-icon.png",terminate_server),(boost::format("tekuteku-%04d") % m_port).str().c_str()) != 0 ) {
 			log("failed to start tray\n");
 			terminate_server();
 			return 0;
 		}
 		while ( tray_loop(1) == 0 ) {}
-		CloseHandle(request_broadcast);
+		#endif
+
 		return 0;
 	}
 	catch ( boost::system::system_error& e ) { log((boost::format("boost exception : %s\n") % e.what()).str()); }
 	catch ( std::exception& e ) { log((boost::format("exception : %s\n") % e.what()).str()); }
 	catch ( ... ) { log("unknown exception\n"); }
+	#ifdef _WINDOWS
 	MessageBoxW(NULL,L"エラーのため終了します。もう一度動かして下さい。",L"てくてくノートサーバ",MB_OK);
+	#endif
 	return 1;
 }

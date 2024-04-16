@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-04-13</title>
+<title>てくてくノート ver 2024-04-16</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -13,7 +13,7 @@
 <div class="container-fluid">
 <div class="row">
 	<div class="col col-10">
-		<div class="input-group m-2 taker-extra"><input type="text" id="host" class="form-control fs-4 alert alert-warning" readonly/></div>
+		<div class="input-group m-2"><input type="text" id="host" class="form-control fs-4 alert alert-warning" readonly/></div>
 		<div class="bg-dark" style="display:none;" id="whiteboard-exclude"></div>
 		<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;" id="whiteboard-div">
 			<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
@@ -440,7 +440,7 @@ function open( host ) {
 	$('#host').val('接続中 ...').removeClass('alert-success').addClass('alert-warning');
 	socket.onopen = function(event){ connected = true; send(9); };
 	socket.onclose = function(event){ close(); };
-	socket.onerror = function(event){ close(); }
+	socket.onerror = function(event){} // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
 }
 
@@ -452,21 +452,28 @@ function close() {
 }
 
 async function host_select(hosts) {
-	$('#dialog-select').empty();
-	hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
-	let x = new bootstrap.Modal($('#dialog').get(0),{});
-	let dialog = new Promise((resolve)=>{
-		$('#dialog-button-ok').one('click',()=>{
-			host=$('#dialog-select > option:selected').val();
-			$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
-			x.hide();
-		});
-		$('#dialog')
-			.off('hidden.bs.modal')
-			.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
-		x.show();
-	});
-	const result = await dialog;
+	if ( is_localhost == true ) {
+		if ( hosts.length == 0 ) { alert("ネットワークにつながっていません"); return; }
+		if ( hosts.length >= 2 ) {
+			$('#dialog-select').empty();
+			hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
+			let x = new bootstrap.Modal($('#dialog').get(0),{});
+			let dialog = new Promise((resolve)=>{
+				$('#dialog-button-ok').one('click',()=>{
+					host=$('#dialog-select > option:selected').val();
+					$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
+					x.hide();
+				});
+				$('#dialog')
+					.off('hidden.bs.modal')
+					.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+				x.show();
+			});
+			const result = await dialog;
+		}
+		else { host = hosts[0]; }
+	}
+	$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
 }
 
 function receive(event) {
@@ -474,15 +481,7 @@ function receive(event) {
 	switch ( responce.type ) {
 	case 0 :
 		id = responce.id;
-		if ( is_localhost == true ) {
-			if ( responce.server.length == 0 ) { alert("ネットワークにつながっていません"); return; }
-			if ( responce.server.length >= 2 ) {
-				host_select(responce.server);
-				return;
-			}
-			else { host = responce.server[0]; }
-		}
-		$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
+		host_select(responce.server);
 		break;
 	case 1 :
 		responce.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
@@ -635,7 +634,7 @@ $(document).ready( function(){
 	textarea_height = $('#my-text').height();
 	expand_whiteboard();
 
-	$(window).on('beforeunload pagehide',function(){ close(); shortcut_to_cookie(); });
+	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
 	$(window).on("orientationchange resize",()=>{ set_screen_mode(); });
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
