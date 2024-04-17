@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-04-16</title>
+<title>てくてくノート ver 2024-04-17</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -83,14 +83,17 @@
 				<select class="form-select" id="recognition-engine">
 				<option value="0" selected>ブラウザ標準</option>
 				</select>
+				<div class="dropdown" id="recognition-lang">
+					<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
+					<ul class="dropdown-menu">
+					<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
+					<li class="dropdown-item" data-lang="en">英語</li>
+					<li class="dropdown-item" data-lang="de">ドイツ語</li>
+					<li class="dropdown-item" data-lang="zh">中国語</li>
+					</ul>
+				</div>
+				<button class="btn btn-outline-success" id="recognition-dic">辞書読込</button><input type="file" class="form-control" id="recognition-doc-load" style="display:none;" />
 			</div>
-			<div class="form-check m-2" id="recognition-lang">
-				<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-ja-JP" checked><label class="form-check-label" for="recognition-lang-ja-JP">日本語 </label></div>
-				<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-en"><label class="form-check-label" for="recognition-lang-en">英語 </label></div>
-				<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-de"><label class="form-check-label" for="recognition-lang-de">ドイツ語 </label></div>
-				<div class="form-check"><input class="form-check-input" type="radio" name="recognition-lang" id="recognition-lang-zh"><label class="form-check-label" for="recognition-lang-zh">中国語</label></div>
-			</div>
-			<div class="input-group m-2" id="recognition-dic"><button class="btn btn-success" id="dictionary-load">辞書読込</button><input type="file" class="form-control" id="dictionary-load-file" style="display:none;" /></div>
 			<div class="input-group m-2"><input class="form-check-input mx-2" type="checkbox" value="" id="recognition-local"><label class="form-check-label" for="recognition-local">プリロールに出力</label></div>
 		</div>
 		<div class="input-group m-2"><input class="form-check-input mx-2" type="checkbox" value="" id="speech"><label class="form-check-label" for="speech">しゃべる</label></div>
@@ -370,7 +373,7 @@ function set_recognition_engine() {
 	switch ( $('#recognition-engine').val() ) {
 		case "0": {
 			recognizer = recognizer_default();
-			$('#recognition-lang').show().trigger('change');
+			$('#recognition-lang').show().trigger('hide.bs.dropdown');
 			$('#recognition-dic').hide();
 			break;
 		}
@@ -453,7 +456,7 @@ function close() {
 
 async function host_select(hosts) {
 	if ( is_localhost == true ) {
-		if ( hosts.length == 0 ) { alert("ネットワークにつながっていません"); return; }
+		if ( hosts.length == 0 ) { $('#host').val("ネットワークにつながっていません").removeClass('alert-success').addClass('alert-warning'); return; }
 		if ( hosts.length >= 2 ) {
 			$('#dialog-select').empty();
 			hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
@@ -461,7 +464,6 @@ async function host_select(hosts) {
 			let dialog = new Promise((resolve)=>{
 				$('#dialog-button-ok').one('click',()=>{
 					host=$('#dialog-select > option:selected').val();
-					$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
 					x.hide();
 				});
 				$('#dialog')
@@ -507,7 +509,6 @@ function receive(event) {
 			$('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text));
 		});
 		$('td.teku').css('background-image',mk_guide());
-		expand_whiteboard();	// table-takers の高さが変化するためここも必要。
 		break;
 	}
 }
@@ -587,7 +588,6 @@ function set_screen_mode(mode) {
 		if ( h_exclude > 0 ) { $('#whiteboard-exclude').css('height',h_exclude+'px').show(); }
 		break;
 	}
-	expand_whiteboard();
 	$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
 }
 
@@ -632,7 +632,8 @@ $(document).ready( function(){
 	set_screen_mode(0);
 	shortcut_from_cookie();
 	textarea_height = $('#my-text').height();
-	expand_whiteboard();
+	const resizeObserver = new ResizeObserver((entries)=>{expand_whiteboard();});
+	resizeObserver.observe(document.querySelector('#whiteboard-div,#table-takers,#my-text,#pre-roll'));
 
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
 	$(window).on("orientationchange resize",()=>{ set_screen_mode(); });
@@ -665,8 +666,8 @@ $(document).ready( function(){
 		}
 	});
 
-	$('#dictionary-load').on('click',function(){ $('#dictionary-load-file').click(); });
-	$('#dictionary-load-file').on('change',function(){
+	$('#recognition-dic').on('click',function(){ $('#recognition-dic-load').click(); });
+	$('#recognition-dic-load').on('change',function(){
 		if ( this.files.length == 1 ) {
 			let blob = this.files[0];
 			let reader = new FileReader();
@@ -677,8 +678,8 @@ $(document).ready( function(){
 					if ( c[0].length != 0 && c[1].length != 0 ) { dic.push(c[0]+' '+c[1]); }
 				});
 				recognizer.set_dic(dic);
-				$('#dictionary-load-file').val('');
-				$('#dictionary-load').blur();
+				$('#recognition-dic-load').val('');
+				$('#recognition-dic').blur();
 			};
 			reader.readAsText(blob);
 		}
@@ -686,7 +687,12 @@ $(document).ready( function(){
 	$('#recognition-control').on('click',function(event){ if ( $('#recognition-control').val() == 0 ) { recognizer.start(); } else { recognizer.stop(); } });
 	$('#recognition-engine').on('change',set_recognition_engine);
 	$('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
-	$('input[name="recognition-lang"]').on('change',(event)=>{ recognizer.set_lang($('input[name="recognition-lang"]:checked').attr('id').substring("recognition-lang-".length)); });
+	$('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) {
+		console.log('debug '+$(clickEvent.target).data('lang'));
+		recognizer.set_lang($(clickEvent.target).data('lang'));
+		$('#recognition-lang li').removeClass('text-bg-primary');
+		$(clickEvent.target).addClass('text-bg-primary');
+	} });
 
 	$('#my-text').on('input',function(event){
 		let o = $('#my-text')[0];
@@ -743,7 +749,7 @@ $(document).ready( function(){
 						uttr.lang = $('input[name="recognition-lang"]:checked').attr('id').substring("recognition-lang-".length);
 						speechSynthesis.speak(uttr);
 					}
-					$('#my-text').val('').height(textarea_height);
+					$('#my-text').val('').prop('rows',1).height(textarea_height);
 					my_text_index = -1;
 					my_text_previous = '';
 				}
@@ -759,16 +765,6 @@ $(document).ready( function(){
 				my_text_index = -1;
 				break;
 			}
-		}
-		else if ( event.target == $('#host')[0] && event.key == 'Enter' ) {
-			$('#host').blur();
-			if ( host.length == 0 ) {
-				var s = $('#host').val();
-				if ( s.length == 0 ) { alert("まずサーバアドレスを記入して下さい。"); return; }
-				if ( /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(s) != true ) { alert("サーバアドレスが間違ってます。"+s.length); return; }
-				host = s;
-			}
-			open(host);
 		}
 		switch ( event.key ) {
 			case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
