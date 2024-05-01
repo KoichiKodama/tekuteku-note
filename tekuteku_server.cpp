@@ -56,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-04-17";
+static std::string m_version = "build 2024-04-18";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
@@ -304,14 +304,14 @@ void broadcast_status( boost::asio::yield_context yield ) {
 
 			for (auto& e : m_takers) {
 				std::shared_ptr<websocket_stream_t> p_ws = e.first;
-				taker_info_t& info = e.second;
+				taker_info_t& t = e.second;
 				nlohmann::json x;
 				x["type"] = 1;
 				x["takers"] = j_takers;
 				x["whiteboard_size"] = m_whiteboard.size();
-				if ( info.is_init == true ) {
+				if ( t.is_init == true ) {
 					x["whiteboard"] = j_whiteboard_full;
-					info.is_init = false; debug_async_write_full++;
+					t.is_init = false; debug_async_write_full++;
 				}
 				else x["whiteboard"] = j_whiteboard;
 				r_json[p_ws] = x;
@@ -325,9 +325,9 @@ void broadcast_status( boost::asio::yield_context yield ) {
 			boost::system::error_code ec;
 			if (( p_ws )&&( p_ws->is_open() == true )) {
 				p_ws->async_write(b.data(),yield[ec]); debug_async_write++;
-				if (ec) log((boost::format("websocket write error %s total=%d (%s)\n") % r["id"] % r_json.size() % ec.message()).str());
+				if (ec) log((boost::format("websocket write error %s total=%d (%s)\n") % m_takers.at(p_ws).id % r_json.size() % ec.message()).str());
 			}
-			else log((boost::format("websocket write close %s total=%d\n") % r["id"] % r_json.size()).str());
+			else log((boost::format("websocket write close %s total=%d\n") % m_takers.at(p_ws).id % r_json.size()).str());
 		}
 
 		if ( network_changed == true ) {
@@ -683,9 +683,27 @@ void terminate_server() {
 	log("service stopped\n");
 }
 
+std::string load_file_all( const std::string& fname ) {
+	std::string s;
+	std::ifstream x(fname);
+	for (;;) {
+		char b[1024];
+		x.getline(b,sizeof(b));
+		if (x.eof()) break;
+		if (!x) {
+			std::string m = (boost::format("error load_file_all %s\n") % fname).str();
+			log(m);
+			throw std::runtime_error(m);
+		}
+		s+=b;
+		s+="\n";
+	}
+	return s;
+}
+
 #ifdef USE_SSL
 static boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12};
-void load_server_certificate( boost::asio::ssl::context& ctx, const std::string& fname_key, const std::string& fname_crt, const std::string& passwd ) {
+void load_server_certificate( boost::asio::ssl::context& ctx, const std::string& fname_key, const std::string& fname_cer, const std::string& fname_cer_chain, const std::string& passwd ) {
 	// 証明書
 	// m_server_name の値は無関係。
 	// 証明書記載の common name でアクセスしないと NET::ERR_CERT_COMMON_NAME_INVALID となるので localhost で開いてはダメ。
@@ -693,7 +711,11 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 
 	ctx.set_password_callback([passwd](std::size_t,boost::asio::ssl::context_base::password_purpose) { return passwd.c_str(); });
 	ctx.use_private_key_file(fname_key.c_str(),boost::asio::ssl::context::file_format::pem);
-	ctx.use_certificate_chain_file(fname_crt.c_str());
+	std::string s = load_file_all(fname_cer);
+	s += "\n";
+	s += load_file_all(fname_cer_chain);
+	ctx.use_certificate_chain(boost::asio::const_buffer(boost::asio::buffer(s)));
+//	ctx.use_certificate_chain_file(fname_crt.c_str());
 	ctx.set_options( 
 		boost::asio::ssl::context::default_workarounds |
 		boost::asio::ssl::context::no_sslv2 );
@@ -713,12 +735,13 @@ int main( int argc, char** argv ) {
 			}
 			#ifdef USE_SSL
 			else if ( strcmp(*argv,"--ssl") == 0 ) {
-				std::string ssl_key,ssl_crt,ssl_pwd;
+				std::string ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd;
 				argc--; argv++; ssl_key = *argv;
-				argc--; argv++; ssl_crt = *argv;
+				argc--; argv++; ssl_cer = *argv;
+				argc--; argv++; ssl_cer_chain = *argv;
 				argc--; argv++; ssl_pwd = *argv;
-				log(( boost::format("option --ssl %s %s\n") % ssl_key % ssl_crt ).str());
-				load_server_certificate(ctx,ssl_key,ssl_crt,ssl_pwd);
+				log("option --ssl\n");
+				load_server_certificate(ctx,ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd);
 			}
 			#endif
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
@@ -785,10 +808,11 @@ int main( int argc, char** argv ) {
 		#else
 		sigset_t sigset;
 		sigemptyset(&sigset);
-		if ( sigaddset(&sigset,SIGHUP) != 0 ) log("error in sigaddset\n");
+//		if ( sigaddset(&sigset,SIGHUP) != 0 ) log("error in sigaddset\n");
+		if ( sigfillset(&sigset) != 0 ) log("error in sigfillset\n");
 		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n");
 		int signum;
-		if ( sigwait(&sigset,&signum) == 0 ) log("error in sigwait\n");
+		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");
 		terminate_server();
 		#endif
 
