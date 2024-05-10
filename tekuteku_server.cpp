@@ -56,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-04-18";
+static std::string m_version = "build 2024-05-10";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
@@ -187,18 +187,20 @@ using socket_t = boost::asio::ip::tcp::socket;
 #endif
 
 struct taker_info_t {
-	taker_info_t() : is_readonly(false),is_init(false) {};
+	taker_info_t() : is_readonly(false),is_init(false),whiteboard_voice_index(0) {};
 	int num;
 	std::string id;
 	std::string text; // 未確定テキスト
 	bool is_readonly;
 	bool is_init;
+	int whiteboard_voice_index;
 };
 struct whiteboard_element_t {
-	whiteboard_element_t() : id(-1),edit(0),tobe_sent(true) {};
-	whiteboard_element_t( const std::string& text, int id ) : text(text),id(id),edit(0),tobe_sent(true) {};
+	whiteboard_element_t() : id(-1),edit(0),tobe_sent(true),num(-1) {};
+	whiteboard_element_t( const std::string& text, int id, int num ) : text(text),id(id),edit(0),tobe_sent(true),num(num) {};
 	std::string text;
-	int id;
+	int num;	// taker の通番
+	int id;		// taker 毎の音声認識の行番号
 	int edit;
 	bool tobe_sent;
 };
@@ -210,7 +212,6 @@ std::mutex m_mutex;
 int num_connected = 0;	// 延べ接続テイカー
 bool network_changed = false;
 bool whiteboard_updated = false;
-int whiteboard_voice_index = 0;
 
 std::vector<std::string> split( const std::string& x ) {
 	std::vector<std::string> l;
@@ -410,14 +411,14 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				if ( status == 8 ) {
 					if (true) log_whiteboard();
 					m_whiteboard.clear();
-					whiteboard_voice_index = 0;
+					info.whiteboard_voice_index = 0;
 					whiteboard_updated = true;
 				}
 				if ( status == 9 ) info.is_init = true;
 				if ( status == 2 ) {
 					// 新規音声認識セッション開始
-					std::for_each(m_whiteboard.begin()+whiteboard_voice_index,m_whiteboard.end(),[]( auto& c ){ c.id = -1; c.edit = 0; });
-					whiteboard_voice_index = m_whiteboard.size();
+					std::for_each(m_whiteboard.begin()+info.whiteboard_voice_index,m_whiteboard.end(),[&info]( auto& c ){ if ( info.num == c.num ) { c.id = -1; c.edit = 0; } });
+					info.whiteboard_voice_index = m_whiteboard.size();
 				}
 				if ( json_i.contains("text") == true ) {
 					std::string text = json_i["text"];
@@ -426,7 +427,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 					info.text = "";
 					if ( status == 1 && text.empty() == false ) {	// 空文字は無視する仕様
 						if ( text_index == -1 ) {
-							m_whiteboard.push_back(whiteboard_element_t(text,-1));
+							m_whiteboard.push_back(whiteboard_element_t(text,-1,info.num));
 						}
 						else if ( text_index >= 0 && text_index < m_whiteboard.size() ) {
 							auto& c = m_whiteboard[text_index];
@@ -451,9 +452,9 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				if ( json_i.contains("voice_text") == true && json_i["voice_text"].empty() == false ) {
 					auto& l = json_i["voice_text"];
 					for (const auto& x : l) {
-						auto ii = std::find_if(m_whiteboard.begin()+whiteboard_voice_index,m_whiteboard.end(),[x]( const auto& c ){ return ( c.id == x["id"] ? true : false ); });
+						auto ii = std::find_if(m_whiteboard.begin()+info.whiteboard_voice_index,m_whiteboard.end(),[x,&info]( const auto& c ){ return ( c.num == info.num && c.id == x["id"] ? true : false ); });
 						if ( ii == m_whiteboard.end() ) {
-							m_whiteboard.push_back(whiteboard_element_t(x["text"],x["id"]));
+							m_whiteboard.push_back(whiteboard_element_t(x["text"],x["id"],info.num));
 						}
 						else {
 							auto& c = (*ii);
@@ -466,7 +467,8 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 					}
 					int id_max = l[l.size()-1]["id"];
 					bool is_erased = false;
-					for (auto ii=m_whiteboard.begin()+whiteboard_voice_index;ii!=m_whiteboard.end();) {
+					for (auto ii=m_whiteboard.begin()+info.whiteboard_voice_index;ii!=m_whiteboard.end();) {
+						if ( (*ii).num != info.num ) { ii++; continue; }
 						if ( (*ii).id > id_max ) {
 							ii = m_whiteboard.erase(ii);
 							is_erased = true;
