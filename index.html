@@ -418,7 +418,7 @@ function my_split(s,min_length,max_length,lang) {
 function send( status ) {
 	if ( connected == true ) {
 		var responce = new Object();
-		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),全データ要求(9)
+		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),全データ要求(9),黒板クリア(8)
 		if ( status != 8 && screen_mode == 0 ) {
 			responce.text = $('#my-text').val();
 			responce.text_index = my_text_index;
