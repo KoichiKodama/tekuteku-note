@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-04-17</title>
+<title>てくてくノート ver 2024-05-15</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -632,11 +632,12 @@ $(document).ready( function(){
 	set_screen_mode(0);
 	shortcut_from_cookie();
 	textarea_height = $('#my-text').height();
-	const resizeObserver = new ResizeObserver((entries)=>{expand_whiteboard();});
-	resizeObserver.observe(document.querySelector('#whiteboard-div,#table-takers,#my-text,#pre-roll'));
+
+	const resize_observer = new ResizeObserver((entries)=>{expand_whiteboard();});
+	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{ resize_observer.observe(e); });
 
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
-	$(window).on("orientationchange resize",()=>{ set_screen_mode(); });
+	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); expand_whiteboard(); });
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
 	$('#clear').on('click',function(){ send(8); });
