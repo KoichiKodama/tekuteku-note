@@ -56,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-05-10";
+static std::string m_version = "build 2024-05-15";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
@@ -411,7 +411,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				if ( status == 8 ) {
 					if (true) log_whiteboard();
 					m_whiteboard.clear();
-					info.whiteboard_voice_index = 0;
+					std::for_each(m_takers.begin(),m_takers.end(),[]( auto& e ){ e.second.whiteboard_voice_index = 0; });
 					whiteboard_updated = true;
 				}
 				if ( status == 9 ) info.is_init = true;
