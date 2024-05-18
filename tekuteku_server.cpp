@@ -56,8 +56,9 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-05-15";
+static std::string m_version = "build 2024-05-17";
 static std::string m_server_name = "tekuteku-server";
+static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
 static int session_timeout = 21600;
@@ -409,7 +410,8 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				int status = json_i["status"];
 				std::lock_guard<std::mutex> lock(m_mutex);
 				if ( status == 8 ) {
-					if (true) log_whiteboard();
+					log((boost::format("clear whiteboard by %s\n") % info.id).str());
+					log_whiteboard();
 					m_whiteboard.clear();
 					std::for_each(m_takers.begin(),m_takers.end(),[]( auto& e ){ e.second.whiteboard_voice_index = 0; });
 					whiteboard_updated = true;
@@ -541,21 +543,6 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	boost::beast::flat_buffer buffer;
 	boost::beast::http::request<boost::beast::http::string_body> req;
 
-	boost::beast::http::async_read(stream,buffer,req,yield[ec]);
-	if ( ec == boost::beast::http::error::end_of_stream ) {
-		socket.shutdown(boost::asio::ip::tcp::socket::shutdown_send,ec);
-		return;
-	}
-	if (ec) return;
-	if ( boost::beast::websocket::is_upgrade(req) ) {
-		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
-		boost::asio::spawn(boost::beast::get_lowest_layer(*p_ws).socket().get_executor(),std::bind(&exec_websocket_session,p_ws,req,std::placeholders::_1));
-		return;
-	}
-
-	bool close = false;
-	send_lambda send{stream,close,ec,yield};
-
 	auto const bad_request = [&req](boost::beast::string_view why){
 		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::bad_request,req.version()};
 		res.set(boost::beast::http::field::server,m_server_name);
@@ -588,10 +575,36 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		return res;
 	};
 
+	bool close = false;
+	send_lambda send{stream,close,ec,yield};
+
+	boost::beast::http::async_read(stream,buffer,req,yield[ec]);
+	if ( ec == boost::beast::http::error::end_of_stream ) {
+		socket.shutdown(boost::asio::ip::tcp::socket::shutdown_send,ec);
+		return;
+	}
+	if (ec) return;
+	if ( boost::beast::websocket::is_upgrade(req) ) {
+		if (!m_magic.empty()) {
+			std::string::size_type x = req.target().find("?");
+			std::string query = ( x != std::string::npos ? req.target().substr(x) : "" );
+			if ( query != ("?magic="+m_magic) ) return send(bad_request("authentication failure"));
+		}
+		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
+		boost::asio::spawn(boost::beast::get_lowest_layer(*p_ws).socket().get_executor(),std::bind(&exec_websocket_session,p_ws,req,std::placeholders::_1));
+		return;
+	}
+
 	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return send(bad_request("Unknown HTTP-method"));
 	if ( req.target().empty() || req.target()[0] != '/' || req.target().find("..") != boost::beast::string_view::npos ) return send(bad_request("Illegal request-target"));
-
-	std::string path = "./" + std::string(req.target()) + ( req.target().back() == '/' ? "index.html" : "" );
+	std::string target = req.target();
+	if (!m_magic.empty()) {
+		std::string::size_type x = target.find("?");
+		std::string query = ( x != std::string::npos ? target.substr(x) : "" );
+		target = target.substr(0,x);
+		if (( target == "/" || target == "/index.html" )&&( query != ("?magic="+m_magic) )) return send(bad_request("authentication failure"));
+	}
+	std::string path = "." + target + ( target.back() == '/' ? "index.html" : "" );
 	boost::beast::http::file_body::value_type body;
 	body.open(path.c_str(),boost::beast::file_mode::scan,ec);
 	if ( ec == boost::system::errc::no_such_file_or_directory ) return send(not_found(req.target()));
@@ -742,10 +755,12 @@ int main( int argc, char** argv ) {
 				argc--; argv++; ssl_cer = *argv;
 				argc--; argv++; ssl_cer_chain = *argv;
 				argc--; argv++; ssl_pwd = *argv;
-				log("option --ssl\n");
 				load_server_certificate(ctx,ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd);
 			}
 			#endif
+			else if ( strcmp(*argv,"--magic") == 0 ) {
+				argc--; argv++; m_magic = *argv;
+			}
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
 			argc--; argv++;
 		}
