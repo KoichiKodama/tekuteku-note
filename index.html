@@ -343,7 +343,7 @@ function recognizer_default() {
 	sprec.onspeechend = function(event) {}
 	sprec.onstart = function() { change_state(2); }
 	sprec.onend = function() { if ( state == 2 ) { sprec.start(); } }
-	sprec.onerror = function(event) { console.log('recognition error : '+event.error); sprec.stop(); }
+	sprec.onerror = function(event) { sprec.stop(); }
 
 	var recognizer_ = {
 		start : start_,
