@@ -56,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-05-17";
+static std::string m_version = "build 2024-05-22";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -265,6 +265,11 @@ private:
 };
 request_broadcast_event_t request_broadcast{};
 
+const std::string get_taker_id( const std::shared_ptr<websocket_stream_t>& p_ws ) {
+	if ( m_takers.find(p_ws) == m_takers.end() ) return "erased-socket";
+	return m_takers.at(p_ws).id;
+}
+
 void broadcast_status( boost::asio::yield_context yield ) {
 	nlohmann::json j_whiteboard = nlohmann::json::array();
 	nlohmann::json j_whiteboard_full = nlohmann::json::array();
@@ -327,9 +332,9 @@ void broadcast_status( boost::asio::yield_context yield ) {
 			boost::system::error_code ec;
 			if (( p_ws )&&( p_ws->is_open() == true )) {
 				p_ws->async_write(b.data(),yield[ec]); debug_async_write++;
-				if (ec) log((boost::format("websocket write error %s total=%d (%s)\n") % m_takers.at(p_ws).id % r_json.size() % ec.message()).str());
+				if (ec) log((boost::format("websocket write error %s total=%d (%s)\n") % get_taker_id(p_ws) % r_json.size() % ec.message()).str());
 			}
-			else log((boost::format("websocket write close %s total=%d\n") % m_takers.at(p_ws).id % r_json.size()).str());
+			else log((boost::format("websocket write close %s total=%d\n") % get_taker_id(p_ws) % r_json.size()).str());
 		}
 
 		if ( network_changed == true ) {
@@ -487,8 +492,8 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 		}
 		log((boost::format("websocket session stop %s total=%d\n") % info.id % m_takers.size()).str());
 	}
-	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % m_takers[p_ws].id % e.what()).str()); }
-	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % m_takers[p_ws].id % e.what()).str()); }
+	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
+	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
 	if ( m_takers.find(p_ws) != m_takers.end() ) {
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_takers.erase(p_ws);
