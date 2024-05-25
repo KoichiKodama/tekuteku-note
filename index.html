@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-05-18</title>
+<title>てくてくノート ver 2024-05-25</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -12,15 +12,15 @@
 <body>
 <div class="container-fluid">
 <div class="row">
-<div class="col-md-10">
-	<div class="input-group m-2"><input type="text" id="host" class="form-control fs-4 alert alert-warning" readonly/></div>
+<div class="col">
+	<div id="host" class="w-100 px-3 py-2 m-2 rounded-2 fs-taker"></div>
 	<div class="bg-dark" style="display:none;" id="whiteboard-exclude"></div>
 	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;" id="whiteboard-div">
 		<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
 	</div>
-	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-4" id="table-takers"><tbody></tbody></table>
-	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-4" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
-	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-4" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
+	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
+	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
+	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
 	<div class="d-flex flex-row justify-content-start align-items-center">
 	<div class="btn-group m-2">
 		<div class="dropdown" id="screen-theme">
@@ -58,9 +58,7 @@
 			</ul>
 		</div>
 	</div>
-	<div class="btn-group m-2">
-		<input class="btn-check btn-outline-secondary taker-extra" type="checkbox" id="speech" /><label class="btn btn-outline-secondary taker-extra" for="speech">しゃべる</label>
-	</div>
+	<input class="btn-check btn-outline-secondary taker-extra" type="checkbox" id="speech" /><label class="btn btn-outline-secondary taker-extra" for="speech">しゃべる</label>
 	</div>
 	<div id="xxx"></div>
 </div>
@@ -79,30 +77,28 @@
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-load">読込</button><input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-save">保存</button>
 	</div>
-	<div id="voice-recognition">
-		<div class="btn-group-vertical m-2">
-			<button class="btn btn-outline-success" id="recognition-control" value="0" disabled>音声認識開始</button>
-			<div class="btn-group" role="group">
-				<div class="dropdown" id="recognition-engine">
-					<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
-					<ul class="dropdown-menu">
-					<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
-					<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
-					</ul>
-				</div>
-				<div class="dropdown" id="recognition-lang">
-					<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
-					<ul class="dropdown-menu">
-					<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
-					<li class="dropdown-item" data-lang="en">英語</li>
-					<li class="dropdown-item" data-lang="de">ドイツ語</li>
-					<li class="dropdown-item" data-lang="zh">中国語</li>
-					</ul>
-				</div>
-				<button class="btn btn-outline-secondary" id="recognition-dic">辞書読込</button>
+	<div id="voice-recognition" class="taker">
+		<button class="btn btn-outline-success m-2" id="recognition-control" value="0" disabled>音声認識開始</button>
+		<div class="btn-group mx-2 my-1" role="group">
+			<div class="dropdown" id="recognition-engine">
+				<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
+				<ul class="dropdown-menu">
+				<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
+				<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
+				</ul>
 			</div>
-			<!--<input class="btn-check btn-outline-secondary" type="checkbox" value="" id="recognition-local"><label class="btn btn-outline-secondary" for="recognition-local">プリロールに出力</label>-->
+			<div class="dropdown" id="recognition-lang">
+				<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
+				<ul class="dropdown-menu">
+				<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
+				<li class="dropdown-item" data-lang="en">英語</li>
+				<li class="dropdown-item" data-lang="de">ドイツ語</li>
+				<li class="dropdown-item" data-lang="zh">中国語</li>
+				</ul>
+			</div>
+			<button class="btn btn-outline-secondary" id="recognition-dic">辞書読込</button>
 		</div>
+		<!--<input class="btn-check btn-outline-secondary" type="checkbox" value="" id="recognition-local"><label class="btn btn-outline-secondary" for="recognition-local">プリロールに出力</label>-->
 	</div>
 	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
 </div>
@@ -444,11 +440,14 @@ function send( status ) {
 	}
 }
 
+const k_success = 'text-success-emphasis bg-success-subtle border border-success-subtle';
+const k_warning = 'text-warning-emphasis bg-warning-subtle border border-warning-subtle';
+
 function open( host ) {
 	let url = ( location.protocol == 'http:' ? 'ws://' : 'wss://' )+host+location.search;
 	if ( connected == true ) { close(); }
 	socket = new WebSocket(url);
-	$('#host').val('接続中 ...').removeClass('alert-success').addClass('alert-warning');
+	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
 	socket.onopen = function(event){ connected = true; send(9); };
 	socket.onclose = function(event){ close(); };
 	socket.onerror = function(event){} // iphone で background 移行数秒後に発生する。
@@ -458,13 +457,13 @@ function open( host ) {
 function close() {
 	socket.close();
 	socket = undefined;
-	$('#host').val('サーバとの接続が切断されました。再接続して下さい。').removeClass('alert-success').addClass('alert-warning');
+	$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
 	connected = false;
 }
 
 async function host_select(hosts) {
 	if ( is_localhost == true ) {
-		if ( hosts.length == 0 ) { $('#host').val("ネットワークにつながっていません").removeClass('alert-success').addClass('alert-warning'); return; }
+		if ( hosts.length == 0 ) { $('#host').text("ネットワークにつながっていません").removeClass(k_success).addClass(k_warning); }
 		if ( hosts.length >= 2 ) {
 			$('#dialog-select').empty();
 			hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
@@ -483,7 +482,7 @@ async function host_select(hosts) {
 		}
 		else { host = hosts[0]; }
 	}
-	$('#host').val(`${host} に接続しました。`+( location.protocol != 'https:' ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass('alert-warning').addClass('alert-success');
+	$('#host').text(`${host} に接続しました。`+( is_localhost ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass(k_warning).addClass(k_success);
 }
 
 function receive(event) {
@@ -553,6 +552,7 @@ function expand_whiteboard() {
 }
 
 function set_font_size( font_size ) {
+	$('.fs-taker').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(( font_size != 'fs-5' ? 'fs-4' : 'fs-5' ));
 	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(font_size);
 	$('#font-size li').removeClass('text-bg-primary').filter(sprintf('[data-fs="%s"]',font_size)).addClass('text-bg-primary');
 }
@@ -563,21 +563,15 @@ function set_theme(theme) {
 }
 
 function set_screen_mode(mode) {
-	let use_extra = ( $(window).width() < 768 ? false : true );
 	if ( mode != null ) { screen_mode = mode; }
+	let is_small_screen = ( $(window).width() < 768 ? true : false );
+	if ( is_small_screen ) { $('#voice-recognition').insertAfter($('#pre-roll').parent()); } else { $('#voice-recognition').insertBefore($('#clear').parent()); }
 	switch(screen_mode) {
 	case 0:
 		$('#whiteboard-exclude').hide();
 		$('#host').show();
 		$('.taker').show();
-		if ( use_extra ) {
-			$('#voice-recognition').insertBefore($('#clear').parent());
-			$('.taker-extra').show();
-		}
-		else {
-			$('#voice-recognition').insertAfter($('#pre-roll').parent());
-			$('.taker-extra').hide();
-		}
+		if ( is_small_screen ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
 		break;
 	case 1:
 		$('#whiteboard-exclude').hide();
