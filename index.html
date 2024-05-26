@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-05-25</title>
+<title>てくてくノート ver 2024-05-26</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -13,15 +13,36 @@
 <div class="container-fluid">
 <div class="row">
 <div class="col">
-	<div id="host" class="w-100 px-3 py-2 m-2 rounded-2 fs-taker"></div>
+	<div id="host" class="w-100 px-3 py-2 m-2 rounded-2 text-truncate fs-taker"></div>
 	<div class="bg-dark" style="display:none;" id="whiteboard-exclude"></div>
 	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;" id="whiteboard-div">
 		<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
 	</div>
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
-	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
+	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control text-truncate fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
 	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
-	<div class="d-flex flex-row justify-content-start align-items-center">
+	<div class="input-group">
+	<div id="voice-recognition" class="btn-group m-2">
+		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
+			<div class="dropdown" id="recognition-engine">
+				<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
+				<ul class="dropdown-menu">
+				<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
+				<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
+				</ul>
+			</div>
+			<div class="dropdown" id="recognition-lang">
+				<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
+				<ul class="dropdown-menu">
+				<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
+				<li class="dropdown-item" data-lang="en">英語</li>
+				<li class="dropdown-item" data-lang="de">ドイツ語</li>
+				<li class="dropdown-item" data-lang="zh">中国語</li>
+				</ul>
+			</div>
+			<button class="btn btn-outline-secondary" id="recognition-dic">辞書読込</button>
+		<!--<input class="btn-check btn-outline-secondary" type="checkbox" value="" id="recognition-local"><label class="btn btn-outline-secondary" for="recognition-local">プリロールに出力</label>-->
+	</div>
 	<div class="btn-group m-2">
 		<div class="dropdown" id="screen-theme">
 			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">画面テーマ</button>
@@ -58,11 +79,12 @@
 			</ul>
 		</div>
 	</div>
-	<input class="btn-check btn-outline-secondary taker-extra" type="checkbox" id="speech" /><label class="btn btn-outline-secondary taker-extra" for="speech">しゃべる</label>
+	<div class="btn-group m-2 taker-extra">
+		<input class="btn-check btn-outline-secondary" type="checkbox" id="speech" /><label class="btn btn-outline-secondary text-nowrap" for="speech">しゃべる</label>
 	</div>
-	<div id="xxx"></div>
+	</div>
 </div>
-<div class="col-md-2 taker-extra">
+<div class="col col-2 taker-extra">
 	<div class="input-group m-2"><span class="input-group-text">F1</span><input type="text" id="key-1" class="form-control" value=""/></div>
 	<div class="input-group m-2"><span class="input-group-text">F2</span><input type="text" id="key-2" class="form-control" value=""/></div>
 	<div class="input-group m-2"><span class="input-group-text">F3</span><input type="text" id="key-3" class="form-control" value=""/></div>
@@ -76,29 +98,6 @@
 		<span class="input-group-text">短縮キー</span>
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-load">読込</button><input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-save">保存</button>
-	</div>
-	<div id="voice-recognition" class="taker">
-		<button class="btn btn-outline-success m-2" id="recognition-control" value="0" disabled>音声認識開始</button>
-		<div class="btn-group mx-2 my-1" role="group">
-			<div class="dropdown" id="recognition-engine">
-				<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
-				<ul class="dropdown-menu">
-				<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
-				<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
-				</ul>
-			</div>
-			<div class="dropdown" id="recognition-lang">
-				<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
-				<ul class="dropdown-menu">
-				<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
-				<li class="dropdown-item" data-lang="en">英語</li>
-				<li class="dropdown-item" data-lang="de">ドイツ語</li>
-				<li class="dropdown-item" data-lang="zh">中国語</li>
-				</ul>
-			</div>
-			<button class="btn btn-outline-secondary" id="recognition-dic">辞書読込</button>
-		</div>
-		<!--<input class="btn-check btn-outline-secondary" type="checkbox" value="" id="recognition-local"><label class="btn btn-outline-secondary" for="recognition-local">プリロールに出力</label>-->
 	</div>
 	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
 </div>
@@ -546,12 +545,29 @@ function get_current_line() {
 	return ( i1 == -1 ? s.substring(i0) : s.substring(i0,i1) );
 }
 
+function is_smaller(breakpoint) {
+	switch (breakpoint) {
+		case 'sm' : return ( $(window).width() < 576 ? true : false );
+		case 'md' : return ( $(window).width() < 768 ? true : false );
+		case 'lg' : return ( $(window).width() < 992 ? true : false );
+	}
+	return false;
+}
+
 function expand_whiteboard() {
-	let x = $(window).height()-($('#xxx').offset().top+$('#xxx').height());
-	$('#whiteboard-div').height($('#whiteboard-div').height()+x);
+	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
+	let o = $('#screen-theme').parent().parent();
+	let x0 = o.offset().top+o.height();
+	let dx = Math.floor(window.visualViewport.height-x0);
+	if ( dx == 0 ) return;
+	let xmin = 3*parseInt($('#whiteboard-table').css('line-height').match(/[0-9.]+/));
+	let x = Math.max(xmin,$('#whiteboard-div').height()+dx);
+	$('#whiteboard-div').height(x);
+	window.scroll({top:0,behavior:'instant'});
 }
 
 function set_font_size( font_size ) {
+	if ( /^fs-[1-5]$/.test(font_size) == false ) { return; }
 	$('.fs-taker').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(( font_size != 'fs-5' ? 'fs-4' : 'fs-5' ));
 	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(font_size);
 	$('#font-size li').removeClass('text-bg-primary').filter(sprintf('[data-fs="%s"]',font_size)).addClass('text-bg-primary');
@@ -564,14 +580,12 @@ function set_theme(theme) {
 
 function set_screen_mode(mode) {
 	if ( mode != null ) { screen_mode = mode; }
-	let is_small_screen = ( $(window).width() < 768 ? true : false );
-	if ( is_small_screen ) { $('#voice-recognition').insertAfter($('#pre-roll').parent()); } else { $('#voice-recognition').insertBefore($('#clear').parent()); }
 	switch(screen_mode) {
 	case 0:
 		$('#whiteboard-exclude').hide();
 		$('#host').show();
 		$('.taker').show();
-		if ( is_small_screen ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
+		if ( is_smaller('lg') ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
 		break;
 	case 1:
 		$('#whiteboard-exclude').hide();
@@ -611,6 +625,7 @@ function shortcut_from_cookie() {
 			case 'F9' : $('#key-9').val(val); break;
 			case 'screen-theme' : set_theme(val); break;
 			case 'screen-mode' : set_screen_mode(parseInt(val)); break;
+			case 'font-size' : set_font_size(val); break;
 		}
 	});
 }
@@ -627,17 +642,19 @@ function shortcut_to_cookie() {
 	document.cookie = 'F9='+encodeURI($('#key-9').val());
 	document.cookie = 'screen-theme='+encodeURI(document.documentElement.getAttribute('data-bs-theme').toString());
 	document.cookie = 'screen-mode='+encodeURI(screen_mode.toString());
+	document.cookie = 'font-size='+encodeURI($('#font-size li').filter('.text-bg-primary').data('fs'));
 }
 
 $(document).ready( function(){
-	set_font_size('fs-2');
+	set_font_size('fs-4');
 	set_theme('dark');
 	set_screen_mode(0);
 	shortcut_from_cookie();
 	textarea_height = $('#my-text').height();
 
 	const resize_observer = new ResizeObserver((entries)=>{expand_whiteboard();});
-	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{ resize_observer.observe(e); });
+	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
+	window.visualViewport.addEventListener("resize",()=>{expand_whiteboard();});
 
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
 	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); expand_whiteboard(); });
