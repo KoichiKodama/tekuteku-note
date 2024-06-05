@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-05-26</title>
+<title>てくてくノート ver 2024-06-06</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -19,10 +19,10 @@
 		<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
 	</div>
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
-	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control text-truncate fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
+	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
 	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
 	<div class="input-group">
-	<div id="voice-recognition" class="btn-group m-2">
+	<div id="voice-recognition" class="btn-group m-2 taker">
 		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
 			<div class="dropdown" id="recognition-engine">
 				<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
@@ -157,6 +157,8 @@ var dialog;
 var whiteboard = [];
 var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
 var my_text_previous = '';
+var m_takers = [];
+
 var recognizer = null;
 var recognition_local = false;
 var recognized_text_list = [];
@@ -213,7 +215,7 @@ async function decrypt_token( service_name ) {
 }
 
 function recognizer_ami_voice() {
-	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:未初期化
+	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var debug = false;
 
 	var recognizer_ = {
@@ -301,11 +303,12 @@ function recognizer_ami_voice() {
 	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } };
 	function status_(){ change_state(state); return state; };
 	function set_dic_(dictionary){ Wrp.profileWords = dictionary.join('|'); };
+	change_state(0);
 	return recognizer_;
 }
 
 function recognizer_default() {
-	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:未初期化
+	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var debug = false;
 
 	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
@@ -315,7 +318,7 @@ function recognizer_default() {
 	sprec.maxAlternatives = 1;
 	sprec.lang = 'ja-JP';
 
-	sprec.onresult = function(event) {
+	sprec.onresult = function(event){
 		recognized_text_list = [];
 		let j=0;
 		for (let i=0;i<event.results.length;i++) {
@@ -331,14 +334,18 @@ function recognizer_default() {
 		}
 		else { send(0); }
 	}
-	sprec.onspeechstart = function(event) {
+	sprec.onspeechstart = function(event){
 		recognized_text_list = [];
 		send(2);
 	}
-	sprec.onspeechend = function(event) {}
-	sprec.onstart = function() { change_state(2); }
-	sprec.onend = function() { if ( state == 2 ) { sprec.start(); } }
-	sprec.onerror = function(event) { sprec.stop(); }
+	sprec.onspeechend = function(event){}
+	sprec.onstart = function(){ change_state(2); }
+	sprec.onend = function(){ if ( state == 2 ) { sprec.start(); } else { change_state(0); } }
+	sprec.onerror = function(event){
+		change_state(9);
+		sprec.stop();
+//		$('#pre-roll').val($('#pre-roll').val()+'音声認識エラー('+event.error+')\n');
+	}
 
 	var recognizer_ = {
 		start : start_,
@@ -355,7 +362,7 @@ function recognizer_default() {
 	};
 
 	function start_(){ if ( state == 0 ) { sprec.start(); } };
-	function stop_(){ change_state(0); sprec.stop(); };
+	function stop_(){ change_state(1); sprec.stop(); };
 	function status_(){ change_state(state); return state; };
 	function set_lang_(lang){ sprec.lang = lang; if ( state == 2 ) { sprec.stop(); } };
 	change_state(0);
@@ -366,8 +373,8 @@ function recognition_control_update(state) {
 	switch (state) {
 		case 0: { $('#recognition-control').prop('disabled',false).text('音声認識開始').val(0); break; }
 		case 1: { $('#recognition-control').prop('disabled',true).text('...').val(1); break; }
-		case 2: { $('#recognition-control').prop('disabled',false).text('音声認識停止').val(2); break; }
-		case 9: { $('#recognition-control').prop('disabled',true).text('音声認識開始').val(9); break; }
+		case 2: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-warning').addClass('btn-outline-success').text('音声認識停止').val(2); break; }
+		case 9: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').text('音声認識開始').val(9); break; }
 	}
 }
 
@@ -484,6 +491,19 @@ async function host_select(hosts) {
 	$('#host').text(`${host} に接続しました。`+( is_localhost ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass(k_warning).addClass(k_success);
 }
 
+function update_table_takers() {
+	$('#table-takers > tbody').empty();
+	m_takers.forEach((c)=>{
+		let is_taker = ( 'text' in c );
+		if ( c.id == id || ( screen_mode != 0 && is_taker == false ) ) return;
+		$('#table-takers > tbody').append(( is_smaller('lg') == false ? 
+			sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,( is_taker == false ? '見るだけ' : c.text.replace(/\n/g,'<br>') )) : 
+			sprintf('<tr><td class="teku">%s</td></tr>',( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') )) 
+		));
+	});
+	$('td.teku').css('background-image',mk_guide());
+}
+
 function receive(event) {
 	var responce = JSON.parse(event.data);
 	switch ( responce.type ) {
@@ -507,14 +527,8 @@ function receive(event) {
 			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',o.i,( o.edit == 1 ? 'class="text-warning"' : '' ),s)); }
 		});
 		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div').scrollTop($('#whiteboard-div')[0].scrollHeight);
-		$('#table-takers > tbody').empty();
-		responce.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).forEach((c)=>{
-			if ( c.id == id ) return;
-			var text = ( !('text' in c ) ? "見るだけ" : c.text.replace(/\n/g,'<br>') );
-			if ( screen_mode != 0 && text == "見るだけ" ) return;
-			$('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,text));
-		});
-		$('td.teku').css('background-image',mk_guide());
+		m_takers = responce.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).concat();
+		update_table_takers();
 		break;
 	}
 }
@@ -555,6 +569,7 @@ function is_smaller(breakpoint) {
 }
 
 function expand_whiteboard() {
+	update_table_takers();
 	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
 	let o = $('#screen-theme').parent().parent();
 	let x0 = o.offset().top+o.height();
@@ -586,6 +601,7 @@ function set_screen_mode(mode) {
 		$('#host').show();
 		$('.taker').show();
 		if ( is_smaller('lg') ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
+		$('#my-text').attr('placeholder',( is_smaller('lg') ? "ここでテキスト入力" : "ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"));
 		break;
 	case 1:
 		$('#whiteboard-exclude').hide();
@@ -652,9 +668,10 @@ $(document).ready( function(){
 	shortcut_from_cookie();
 	textarea_height = $('#my-text').height();
 
-	const resize_observer = new ResizeObserver((entries)=>{expand_whiteboard();});
+	$('#recognition-control').css('width',$('#recognition-control').css('width')); // ボタン幅を固定するためのおまじない。
+	const resize_observer = new ResizeObserver((entries)=>{ expand_whiteboard(); });
 	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
-	window.visualViewport.addEventListener("resize",()=>{expand_whiteboard();});
+	window.visualViewport.addEventListener("resize",()=>{ expand_whiteboard(); });
 
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
 	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); expand_whiteboard(); });
@@ -705,7 +722,13 @@ $(document).ready( function(){
 			reader.readAsText(blob);
 		}
 	});
-	$('#recognition-control').on('click',function(event){ if ( $('#recognition-control').val() == 0 ) { recognizer.start(); } else { recognizer.stop(); } });
+	$('#recognition-control').on('click',function(event){
+		switch ( $('#recognition-control').val() ) {
+			case '0' : { recognizer.start(); break; }
+			case '2' : { recognizer.stop(); break; }
+			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
+		}
+	});
 	$('#recognition-engine').on('hide.bs.dropdown',({clickEvent})=>{
 		let x;
 		if ( clickEvent?.target ) {
