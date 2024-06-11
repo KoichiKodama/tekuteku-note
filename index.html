@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-06-06</title>
+<title>てくてくノート ver 2024-06-10</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -22,7 +22,7 @@
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
 	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
 	<div class="input-group">
-	<div id="voice-recognition" class="btn-group m-2 taker">
+	<div class="btn-group m-2 taker-voice-recognition">
 		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
 			<div class="dropdown" id="recognition-engine">
 				<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
@@ -150,7 +150,6 @@ var translate_text = function(c){ return c.text; }
 
 var socket;
 var connected = false;
-var is_localhost = false;
 var host = "";
 var id;	// 自分自身の識別子
 var dialog;
@@ -468,7 +467,8 @@ function close() {
 }
 
 async function host_select(hosts) {
-	if ( is_localhost == true ) {
+	let message = 'に接続しました。';
+	if ( is_localhost() == true ) {
 		if ( hosts.length == 0 ) { $('#host').text("ネットワークにつながっていません").removeClass(k_success).addClass(k_warning); }
 		if ( hosts.length >= 2 ) {
 			$('#dialog-select').empty();
@@ -487,8 +487,9 @@ async function host_select(hosts) {
 			const result = await dialog;
 		}
 		else { host = hosts[0]; }
+		message += 'このアドレスを他の人に通知して下さい。';
 	}
-	$('#host').text(`${host} に接続しました。`+( is_localhost ? 'このアドレスを他の人に通知して下さい。' : '' )).removeClass(k_warning).addClass(k_success);
+	$('#host').text(host+message).removeClass(k_warning).addClass(k_success);
 }
 
 function update_table_takers() {
@@ -533,6 +534,9 @@ function receive(event) {
 	}
 }
 
+function is_localhost() { return ( location.hostname == 'localhost' || location.hostname == '127.0.0.1' ); }
+function use_voice_recognition() { return ( location.hostname == 'localhost' || location.hostname == '127.0.0.1' || location.protocol == 'https:' ); }
+
 function append_input( s ) {
 	var o = $('#my-text').get(0);
 	var pos = $(o).prop('selectionStart');
@@ -571,14 +575,21 @@ function is_smaller(breakpoint) {
 function expand_whiteboard() {
 	update_table_takers();
 	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
-	let o = $('#screen-theme').parent().parent();
-	let x0 = o.offset().top+o.height();
-	let dx = Math.floor(window.visualViewport.height-x0);
-	if ( dx == 0 ) return;
-	let xmin = 3*parseInt($('#whiteboard-table').css('line-height').match(/[0-9.]+/));
-	let x = Math.max(xmin,$('#whiteboard-div').height()+dx);
-	$('#whiteboard-div').height(x);
-	window.scroll({top:0,behavior:'instant'});
+	let h0 = parseInt($('#whiteboard-table').css('line-height').match(/[0-9.]+/));
+	if ( window.visualViewport.height < 15*h0 ) {
+		$('#host').hide();
+		let x0 = $('#screen-theme').parent().offset().top;
+		let dx = Math.floor(window.visualViewport.height-x0);
+		$('#whiteboard-div').height(Math.max(3*h0,$('#whiteboard-div').height()+dx));
+		window.scroll({top:0,behavior:'instant'});
+	}
+	else {
+		$('#host').show;
+		let x0 = $('div.container-fluid').height();
+		let dx = Math.floor(window.visualViewport.height-x0);
+		$('#whiteboard-div').height($('#whiteboard-div').height()+dx);
+	}
+	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div').scrollTop($('#whiteboard-div')[0].scrollHeight);
 }
 
 function set_font_size( font_size ) {
@@ -600,6 +611,7 @@ function set_screen_mode(mode) {
 		$('#whiteboard-exclude').hide();
 		$('#host').show();
 		$('.taker').show();
+		if ( use_voice_recognition() ) $('.taker-voice-recognition').show();
 		if ( is_smaller('lg') ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
 		$('#my-text').attr('placeholder',( is_smaller('lg') ? "ここでテキスト入力" : "ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"));
 		break;
@@ -607,12 +619,14 @@ function set_screen_mode(mode) {
 		$('#whiteboard-exclude').hide();
 		$('#host').show();
 		$('.taker').hide();
+		$('.taker-voice-recognition').hide();
 		$('.taker-extra').hide();
 		set_theme('dark');
 		break;
 	case 2:
 		$('#host').hide();
 		$('.taker').hide();
+		$('.taker-voice-recognition').hide();
 		$('.taker-extra').hide();
 		set_theme('dark');
 		let o = $('#whiteboard-table tr');
@@ -622,6 +636,7 @@ function set_screen_mode(mode) {
 		break;
 	}
 	$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
+	expand_whiteboard();
 }
 
 function shortcut_from_cookie() {
@@ -887,7 +902,6 @@ $(document).ready( function(){
 		case 'https:': 
 		case 'http:': 
 			host = location.host;
-			if ( location.hostname == 'localhost' || location.hostname == '127.0.0.1' ) { is_localhost = true; }
 			open(host);
 			break;
 	}
@@ -916,7 +930,7 @@ $(document).ready( function(){
 				$('#translate-lang').show();
 			}
 		}
-		if ( is_localhost == true || location.protocol == 'https:' ) { $('#recognition-engine').trigger('hide.bs.dropdown'); } else { $('#voice-recognition').hide(); }
+		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); } else { $('.taker-voice-recognition').hide(); }
 		if ( location.protocol == 'https:' ) { $('#clear').show(); } else { $('#clear').hide(); }
 	});
 });
