@@ -56,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-05-22";
+static std::string m_version = "build 2024-06-11";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -332,9 +332,9 @@ void broadcast_status( boost::asio::yield_context yield ) {
 			boost::system::error_code ec;
 			if (( p_ws )&&( p_ws->is_open() == true )) {
 				p_ws->async_write(b.data(),yield[ec]); debug_async_write++;
-				if (ec) log((boost::format("websocket write error %s total=%d (%s)\n") % get_taker_id(p_ws) % r_json.size() % ec.message()).str());
+				if (ec) log((boost::format("websocket write error %s (%s)\n") % get_taker_id(p_ws) % ec.message()).str());
 			}
-			else log((boost::format("websocket write close %s total=%d\n") % get_taker_id(p_ws) % r_json.size()).str());
+			else log((boost::format("websocket write close %s\n") % get_taker_id(p_ws)).str());
 		}
 
 		if ( network_changed == true ) {
@@ -358,7 +358,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 					boost::system::error_code ec;
 					p_ws->async_write(b.data(),yield[ec]); debug_async_write++;
 					if (ec) {
-						log((boost::format("websocket write error %s total=%d (%s)\n") % info.id % m_takers.size() % ec.message()).str());
+						log((boost::format("websocket write error %s (%s)\n") % info.id % ec.message()).str());
 					}
 					else rc = true;
 				}
@@ -402,11 +402,11 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			p_ws->text(true);
 			p_ws->async_read(buffer,yield[ec]); debug_async_read++;
 			if ( ec == boost::beast::websocket::error::closed ) {
-				log((boost::format("websocket read close %s total=%d\n") % info.id % (m_takers.size()-1)).str());
+				log((boost::format("websocket read close %s\n") % info.id).str());
 				break;
 			}
 			if (ec) {
-				log((boost::format("websocket read error %s total=%d (%s)\n") % info.id % (m_takers.size()-1) % ec.message()).str());
+				log((boost::format("websocket read error %s (%s)\n") % info.id % ec.message()).str());
 				break;
 			}
 			std::string s = boost::beast::buffers_to_string(buffer.data());
@@ -490,7 +490,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				request_broadcast.set();
 			}
 		}
-		log((boost::format("websocket session stop %s total=%d\n") % info.id % m_takers.size()).str());
+		log((boost::format("websocket session stop %s\n") % info.id).str());
 	}
 	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
 	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
@@ -498,6 +498,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_takers.erase(p_ws);
 	}
+	log((boost::format("websocket session terminated total=%d\n") % m_takers.size()).str());
 	request_broadcast.set();
 }
 
