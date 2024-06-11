@@ -578,7 +578,7 @@ function expand_whiteboard() {
 	let h0 = parseInt($('#whiteboard-table').css('line-height').match(/[0-9.]+/));
 	if ( window.visualViewport.height < 15*h0 ) {
 		$('#host').hide();
-		let x0 = $('#screen-theme').parent().offset().top;
+		let x0 = ( use_voice_recognition() ? $('.taker-voice-recognition').offset().top : $('#screen-theme').parent().offset().top );
 		let dx = Math.floor(window.visualViewport.height-x0);
 		$('#whiteboard-div').height(Math.max(3*h0,$('#whiteboard-div').height()+dx));
 		window.scroll({top:0,behavior:'instant'});
