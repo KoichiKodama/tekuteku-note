@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-06-10</title>
+<title>てくてくノート ver 2024-06-16</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -577,19 +577,13 @@ function expand_whiteboard() {
 	update_table_takers();
 	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
 	let h0 = parseInt($('#whiteboard-table').css('line-height').match(/[0-9.]+/));
-	if ( window.visualViewport.height < 20*h0 ) {
-		$('#host').hide();
-		let x0 =  $('#screen-theme').parent().parent().offset().top;
-		let dx = Math.floor(window.visualViewport.height-x0);
-		$('#whiteboard-div').height(Math.max(3*h0,$('#whiteboard-div').height()+dx));
-		window.scroll({top:0,behavior:'instant'});
-	}
-	else {
-		$('#host').show;
-		let x0 = $('div.container-fluid').height();
-		let dx = Math.floor(window.visualViewport.height-x0);
-		$('#whiteboard-div').height($('#whiteboard-div').height()+dx);
-	}
+	let x0 = window.visualViewport.height;
+	let x0_min = h0*20;
+	if ( x0 < x0_min ) { $('#host').hide(); } else { $('#host').show(); }
+	let x1 = $('#whiteboard-div').height()+Math.floor(Math.max(x0,x0_min)-$('div.container-fluid').height());
+	$('#whiteboard-div').height(x1);
+	let x2 = $('#screen-theme').parent().parent().offset().top;
+	window.scroll({top:Math.max(0,x2-x0),behavior:'instant'});
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div').scrollTop($('#whiteboard-div')[0].scrollHeight);
 }
 
