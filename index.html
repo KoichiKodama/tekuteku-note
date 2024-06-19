@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-06-16</title>
+<title>てくてくノート ver 2024-06-19</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -689,20 +689,18 @@ $(document).ready( function(){
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
 	$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
 
-	$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) { set_theme($(clickEvent.target).data('theme')); } });
+	$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_theme($(clickEvent.target).data('theme')); } });
 	$('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target ) {
+		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 			set_screen_mode(parseInt($(clickEvent.target).data('mode')));
 			send(0);
 		}
 	});
-	$('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target ) { set_font_size($(clickEvent.target).data('fs')); } });
+	$('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_font_size($(clickEvent.target).data('fs')); } });
 	$('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target ) {
-			let x = $(clickEvent.target);
+		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 			$('#translate-lang li.text-bg-primary').removeClass('text-bg-primary');
-			x.addClass('text-bg-primary');
-			let lang = x.data('lang');
+			let lang = $(clickEvent.target).addClass('text-bg-primary').data('lang');
 			if ( lang != translate_lang_to ) {
 				translate_lang_to = lang;
 				let t = $('#whiteboard-table > tr > td');
@@ -740,23 +738,20 @@ $(document).ready( function(){
 		}
 	});
 	$('#recognition-engine').on('hide.bs.dropdown',({clickEvent})=>{
-		let x;
-		if ( clickEvent?.target ) {
-			x = $(clickEvent.target);
+		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 			$('#recognition-engine li.text-bg-primary').removeClass('text-bg-primary');
-			x.addClass('text-bg-primary');
+			$(clickEvent.target).addClass('text-bg-primary');
 		}
-		else { x = $('#recognition-engine li').filter('.text-bg-primary'); }
+		let x = $('#recognition-engine li').filter('.text-bg-primary');
 		set_recognition_engine(x.data('engine'));
 		$('#recognition-engine button').text(x.text());
 	});
 //	$('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
 	$('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target ) {
-			let x = $(clickEvent.target);
-			recognizer.set_lang(x.data('lang'));
+		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 			$('#recognition-lang li.text-bg-primary').removeClass('text-bg-primary');
-			x.addClass('text-bg-primary');
+			let x = $(clickEvent.target).addClass('text-bg-primary');
+			recognizer.set_lang(x.data('lang'));
 			$('#recognition-lang button').text(x.text());
 		}
 	});
