@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-06-26</title>
+<title>てくてくノート ver 2024-06-27</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -372,7 +372,12 @@ function recognition_control_update(state) {
 		case 0: { $('#recognition-control').prop('disabled',false).text('音声認識開始').val(0); break; }
 		case 1: { $('#recognition-control').prop('disabled',true).text('お待ち下さい').val(1); break; }
 		case 2: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-warning').addClass('btn-outline-success').text('音声認識停止').val(2); break; }
-		case 9: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').text('音声認識開始').val(9); break; }
+		case 9: {
+			$('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').text('お待ち下さい').val(9); 
+			$('#recognition-engine').trigger('hide.bs.dropdown');
+			recognizer.start();
+			break;
+		}
 	}
 }
 
@@ -469,7 +474,7 @@ function close() {
 async function host_select(hosts) {
 	let message = 'に接続しました。';
 	if ( is_localhost() == true ) {
-		if ( hosts.length == 0 ) { $('#host').text("ネットワークにつながっていません").removeClass(k_success).addClass(k_warning); }
+		if ( hosts === undefined || hosts.length == 0 ) { $('#host').text("ネットワークにつながっていません").removeClass(k_success).addClass(k_warning); return; }
 		if ( hosts.length >= 2 ) {
 			$('#dialog-select').empty();
 			hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
