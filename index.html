@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-06-27</title>
+<title>てくてくノート ver 2024-07-03</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -584,33 +584,34 @@ function set_theme(theme) {
 function is_small_screen() { return ( $(window).width() < 992 )||( window.visualViewport.height < 660 ); }
 
 function set_screen_mode(mode) {
-	if ( mode != null ) { screen_mode = mode; }
+	if ( mode != null ) {
+		screen_mode = mode;
+		$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
+	}
 
 	switch(screen_mode) {
 	case 0:
-		$('#whiteboard-exclude').hide();
 		$('.taker').show();
-		if ( use_voice_recognition() ) { $('.taker-voice-recognition').show(); $('#recognition-engine').trigger('hide.bs.dropdown'); }
+		if ( use_voice_recognition() ) { $('.taker-voice-recognition').show(); } else { $('.taker-voice-recognition').hide(); }
 		if ( is_small_screen() ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
 		$('#my-text').attr('placeholder',( is_small_screen() ? "ここでテキスト入力" : "ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"));
 		break;
 	case 1:
 	case 2:
-		$('#whiteboard-exclude').hide();
 		$('.taker,.taker-voice-recognition,.taker-extra').hide();
 		set_theme('dark');
 		break;
 	}
+	$('#whiteboard-exclude').hide();
 
 	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
 	// iphone で $(...).scrollTop(val) が異様に遅くなる。
 	let x0 = Math.max(400,window.visualViewport.height);
 	let x1 = $('#whiteboard-div').height()+Math.floor(x0-$('div.container-fluid').height());
-	if ( screen_mode == 2 ) { if ( x1-150 > 0 ) { $('#whiteboard-exclude').css('height',(x1-150)+'px').show(); x1=150; } }
+	if ( screen_mode == 2 ) { if ( x1 > 150 ) { $('#whiteboard-exclude').css('height',(x1-150)+'px').show(); x1=150; } }
 	$('#whiteboard-div').height(x1);
 	window.scroll({top:Math.max(0,$('#screen-theme').parent().parent().offset().top-window.visualViewport.height),behavior:'instant'});
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
-	if ( mode != null ) { $('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary'); }
 }
 
 function shortcut_from_cookie() {
@@ -772,6 +773,7 @@ $(document).ready( function(){
 				$('#pre-roll').val('');
 				break;
 			}
+			return;
 		}
 		else if ( event.target == $('#my-text')[0] ) {
 			switch ( event.key ) {
@@ -804,6 +806,7 @@ $(document).ready( function(){
 				my_text_index = -1;
 				break;
 			}
+			return;
 		}
 		switch ( event.key ) {
 			case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
@@ -898,7 +901,7 @@ $(document).ready( function(){
 				$('#translate-lang').show();
 			}
 		}
-		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); } else { $('.taker-voice-recognition').hide(); }
+		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
 		if ( location.protocol == 'https:' ) { $('#clear').show(); } else { $('#clear').hide(); }
 	});
 });
