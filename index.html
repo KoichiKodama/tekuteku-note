@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-07-03</title>
+<title>てくてくノート ver 2024-07-05</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -23,24 +23,24 @@
 	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
 	<div class="input-group">
 	<div class="btn-group m-2 taker-voice-recognition">
-		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
-			<div class="dropdown" id="recognition-engine">
-				<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
-				<ul class="dropdown-menu">
-				<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
-				<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
-				</ul>
-			</div>
-			<div class="dropdown" id="recognition-lang">
-				<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
-				<ul class="dropdown-menu">
-				<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
-				<li class="dropdown-item" data-lang="en">英語</li>
-				<li class="dropdown-item" data-lang="de">ドイツ語</li>
-				<li class="dropdown-item" data-lang="zh">中国語</li>
-				</ul>
-			</div>
-			<button class="btn btn-outline-secondary" id="recognition-dic">辞書読込</button>
+		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" data-bs-toggle="tooltip" data-bs-placement="top" title="不明" disabled>音声認識開始</button>
+		<div class="dropdown" id="recognition-engine">
+			<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
+			<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
+			</ul>
+		</div>
+		<div class="dropdown" id="recognition-lang">
+			<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">日本語</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item text-bg-primary" data-lang="ja-JP">日本語</li>
+			<li class="dropdown-item" data-lang="en">英語</li>
+			<li class="dropdown-item" data-lang="de">ドイツ語</li>
+			<li class="dropdown-item" data-lang="zh">中国語</li>
+			</ul>
+		</div>
+		<button class="btn btn-outline-secondary" id="recognition-dic">辞書読込</button>
 		<!--<input class="btn-check btn-outline-secondary" type="checkbox" value="" id="recognition-local"><label class="btn btn-outline-secondary" for="recognition-local">プリロールに出力</label>-->
 	</div>
 	<div class="btn-group m-2">
@@ -161,6 +161,7 @@ var m_takers = [];
 var recognizer = null;
 var recognition_local = false;
 var recognized_text_list = [];
+var mic_device = null;
 
 class recognized_text {
 	text = "";
@@ -377,6 +378,52 @@ function recognition_control_update(state) {
 			$('#recognition-engine').trigger('hide.bs.dropdown');
 			recognizer.start();
 			break;
+		}
+	}
+}
+
+class mic_device_t {
+	#ui_element;
+	#context;
+	#analyzer;
+	#data;
+	#ok;
+	#timer;
+	label = '不明';
+
+	constructor(s) {
+		this.#ui_element = s;
+		this.#ok = this.init();
+		this.#timer = 0;
+	}
+	async init() {
+		this.#context = new AudioContext();
+		this.#analyzer = this.#context.createAnalyser();
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+		const source = this.#context.createMediaStreamSource(stream);
+		source.connect(this.#analyzer);
+		this.#data = new Uint8Array(this.#analyzer.fftSize);
+		const device_id = stream.getAudioTracks()[0].getSettings().deviceId;
+		const l = await navigator.mediaDevices.enumerateDevices();
+		l.forEach((device)=>{ if ( device.kind == 'audioinput' && device.deviceId == device_id ) { this.label = device.label; }; });
+		bootstrap.Tooltip.getInstance(this.#ui_element).setContent({'.tooltip-inner':this.label});
+	}
+	update() {
+		this.#analyzer.getByteTimeDomainData(this.#data);
+		const d = Array.from(this.#data);
+		const pk = Math.min(255,4*d.reduce((acc,c)=>Math.max(acc,Math.abs(c-128)),0));
+		$(this.#ui_element).css('background-color','rgb(0,'+pk+',0)');
+	}
+	start() {
+		this.#ok.then(()=>{
+			if ( this.#context.state !== 'running' ) { this.#context.resume(); }
+			this.#timer = setInterval(()=>{this.update();},100);
+		});
+	}
+	stop() {
+		if ( this.#timer > 0 ) {
+			clearInterval(this.#timer);
+			this.#timer = 0;
 		}
 	}
 }
@@ -652,6 +699,7 @@ function shortcut_to_cookie() {
 }
 
 $(document).ready( function(){
+	$('#recognition-control').map(function(i,e){ new bootstrap.Tooltip(e,{trigger:'hover'}); });
 	set_font_size('fs-4');
 	set_theme('dark');
 	set_screen_mode(0);
@@ -661,7 +709,6 @@ $(document).ready( function(){
 	const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
 	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
 	window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
-
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
 	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); });
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
@@ -711,8 +758,8 @@ $(document).ready( function(){
 	});
 	$('#recognition-control').on('click',function(event){
 		switch ( $('#recognition-control').val() ) {
-			case '0' : { recognizer.start(); break; }
-			case '2' : { recognizer.stop(); break; }
+			case '0' : { recognizer.start(); mic_device.start(); break; }
+			case '2' : { recognizer.stop(); mic_device.stop(); break; }
 			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
 		}
 	});
@@ -901,7 +948,7 @@ $(document).ready( function(){
 				$('#translate-lang').show();
 			}
 		}
-		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
+		if ( use_voice_recognition() == true ) { mic_device = new mic_device_t('#recognition-control'); $('#recognition-engine').trigger('hide.bs.dropdown'); }
 		if ( location.protocol == 'https:' ) { $('#clear').show(); } else { $('#clear').hide(); }
 	});
 });
