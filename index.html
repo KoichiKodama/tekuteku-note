@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-07-05</title>
+<title>てくてくノート ver 2024-07-09</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -820,7 +820,6 @@ $(document).ready( function(){
 				$('#pre-roll').val('');
 				break;
 			}
-			return;
 		}
 		else if ( event.target == $('#my-text')[0] ) {
 			switch ( event.key ) {
@@ -853,7 +852,6 @@ $(document).ready( function(){
 				my_text_index = -1;
 				break;
 			}
-			return;
 		}
 		switch ( event.key ) {
 			case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
