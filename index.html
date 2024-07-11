@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-07-09</title>
+<title>てくてくノート ver 2024-07-11</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -12,7 +12,7 @@
 <body>
 <div class="container-fluid">
 <div class="row">
-<div class="col">
+<div class="col col-lg-10">
 	<div id="host" class="taker-extra w-100 px-3 py-2 m-2 rounded-2 text-truncate fs-taker"></div>
 	<div class="bg-dark" style="display:none;" id="whiteboard-exclude"></div>
 	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;" id="whiteboard-div">
@@ -94,7 +94,7 @@
 	<div class="input-group m-2"><span class="input-group-text">F7</span><input type="text" id="key-7" class="form-control" value=""/></div>
 	<div class="input-group m-2"><span class="input-group-text">F8</span><input type="text" id="key-8" class="form-control" value=""/></div>
 	<div class="input-group m-2"><span class="input-group-text">F9</span><input type="text" id="key-9" class="form-control" value=""/></div>
-	<div class="input-group m-2">
+	<div class="btn-group m-2">
 		<span class="input-group-text">短縮キー</span>
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-load">読込</button><input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-save">保存</button>
@@ -386,27 +386,33 @@ class mic_device_t {
 	#ui_element;
 	#context;
 	#analyzer;
+	#stream;
+	#source;
 	#data;
-	#ok;
 	#timer;
 	label = '不明';
 
 	constructor(s) {
 		this.#ui_element = s;
-		this.#ok = this.init();
 		this.#timer = 0;
-	}
-	async init() {
 		this.#context = new AudioContext();
 		this.#analyzer = this.#context.createAnalyser();
-		const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-		const source = this.#context.createMediaStreamSource(stream);
-		source.connect(this.#analyzer);
+		this.init().then(()=>{
+			this.#source.disconnect();
+			this.#stream.getTracks().forEach( track => track.stop() );
+		});
+	}
+	async init() {
+		this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+		this.#source = this.#context.createMediaStreamSource(this.#stream);
+		this.#source.connect(this.#analyzer);
 		this.#data = new Uint8Array(this.#analyzer.fftSize);
-		const device_id = stream.getAudioTracks()[0].getSettings().deviceId;
+		const device_id = this.#stream.getAudioTracks()[0].getSettings().deviceId;
 		const l = await navigator.mediaDevices.enumerateDevices();
-		l.forEach((device)=>{ if ( device.kind == 'audioinput' && device.deviceId == device_id ) { this.label = device.label; }; });
-		bootstrap.Tooltip.getInstance(this.#ui_element).setContent({'.tooltip-inner':this.label});
+		let label;
+		l.forEach((device)=>{ if ( device.kind == 'audioinput' && device.deviceId == device_id ) { label = device.label; }; });
+		bootstrap.Tooltip.getInstance(this.#ui_element).setContent({'.tooltip-inner':label});
+		this.label = label;
 	}
 	update() {
 		this.#analyzer.getByteTimeDomainData(this.#data);
@@ -415,7 +421,8 @@ class mic_device_t {
 		$(this.#ui_element).css('background-color','rgb(0,'+pk+',0)');
 	}
 	start() {
-		this.#ok.then(()=>{
+		if ( this.label == '不明' ) return;
+		this.init().then(()=>{
 			if ( this.#context.state !== 'running' ) { this.#context.resume(); }
 			this.#timer = setInterval(()=>{this.update();},100);
 		});
@@ -424,6 +431,8 @@ class mic_device_t {
 		if ( this.#timer > 0 ) {
 			clearInterval(this.#timer);
 			this.#timer = 0;
+			this.#source.disconnect();
+			this.#stream.getTracks().forEach( track => track.stop() );
 		}
 	}
 }
