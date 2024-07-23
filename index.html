@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-07-11</title>
+<title>てくてくノート ver 2024-07-23</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -556,11 +556,13 @@ async function host_select(hosts) {
 function update_table_takers() {
 	$('#table-takers > tbody').empty();
 	m_takers.forEach((c)=>{
-		let is_taker = ( 'text' in c );
-		if ( c.id == id || ( screen_mode != 0 && is_taker == false ) ) return;
+		let is_taker = ( 'text' in c ? true : false );
+		if ( c.id == id ) return;
+		if ( is_taker == false && ( screen_mode != 0 || is_small_screen() == true ) ) return;
+		let s = ( is_taker == true ? c.text.replace(/\n/g,'<br>') : '見るだけ' );
 		$('#table-takers > tbody').append(( is_small_screen() == false ? 
-			sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,( is_taker == false ? '見るだけ' : c.text.replace(/\n/g,'<br>') )) : 
-			sprintf('<tr><td class="teku">%s</td></tr>',( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') )) 
+			sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,s) : 
+			sprintf('<tr><td class="teku">%s</td></tr>',( s.length == 0 ? '　' : s )) // 空文字で行がつぶれない様に全角スペースを入れる
 		));
 	});
 	$('td.teku').css('background-image',mk_guide());
