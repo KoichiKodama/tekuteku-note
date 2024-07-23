@@ -56,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-06-13";
+static std::string m_version = "build 2024-07-18";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -207,7 +207,7 @@ struct whiteboard_element_t {
 };
 std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> m_takers;
 std::vector<whiteboard_element_t> m_whiteboard;
-boost::asio::ip::port_type m_port = DEFAULT_PORT;
+unsigned short m_port = DEFAULT_PORT;
 std::vector<network_t> m_servers;
 std::mutex m_mutex;
 int num_connected = 0;	// 延べ接続テイカー
@@ -734,10 +734,12 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 	ctx.set_password_callback([passwd](std::size_t,boost::asio::ssl::context_base::password_purpose) { return passwd.c_str(); });
 	ctx.use_private_key_file(fname_key.c_str(),boost::asio::ssl::context::file_format::pem);
 	std::string s = load_file_all(fname_cer);
-	s += "\n";
-	s += load_file_all(fname_cer_chain);
+	if ( fname_cer_chain != "-" ) {
+		s += "\n";
+		s += load_file_all(fname_cer_chain);
+	}
 	ctx.use_certificate_chain(boost::asio::const_buffer(boost::asio::buffer(s)));
-//	ctx.use_certificate_chain_file(fname_crt.c_str());
+//	ctx.use_certificate_chain_file(fname_cer.c_str());
 	ctx.set_options( 
 		boost::asio::ssl::context::default_workarounds |
 		boost::asio::ssl::context::no_sslv2 );

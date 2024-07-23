@@ -555,16 +555,22 @@ async function host_select(hosts) {
 
 function update_table_takers() {
 	$('#table-takers > tbody').empty();
-	m_takers.forEach((c)=>{
-		let is_taker = ( 'text' in c ? true : false );
-		if ( c.id == id ) return;
-		if ( is_taker == false && ( screen_mode != 0 || is_small_screen() == true ) ) return;
-		let s = ( is_taker == true ? c.text.replace(/\n/g,'<br>') : '見るだけ' );
-		$('#table-takers > tbody').append(( is_small_screen() == false ? 
-			sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,s) : 
-			sprintf('<tr><td class="teku">%s</td></tr>',( s.length == 0 ? '　' : s )) // 空文字で行がつぶれない様に全角スペースを入れる
-		));
-	});
+	if ( is_small_screen() == true ) {
+		m_takers.forEach((c)=>{
+			let is_taker = ( 'text' in c ? true : false );
+			if ( c.id == id || is_taker == false ) return;
+			let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
+			 $('#table-takers > tbody').append(sprintf('<tr><td class="teku">%s</td></tr>',s));
+		});
+	}
+	else {
+		m_takers.forEach((c)=>{
+			let is_taker = ( 'text' in c ? true : false );
+			if ( c.id == id || ( screen_mode != 0 && is_taker == false ) ) return;
+			let s = ( is_taker == true ? c.text.replace(/\n/g,'<br>') : '見るだけ' );
+			$('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,s));
+		});
+	}
 	$('td.teku').css('background-image',mk_guide());
 }
 
