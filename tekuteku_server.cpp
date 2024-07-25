@@ -207,7 +207,7 @@ struct whiteboard_element_t {
 };
 std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> m_takers;
 std::vector<whiteboard_element_t> m_whiteboard;
-unsigned short m_port = DEFAULT_PORT;
+boost::asio::ip::port_type m_port = DEFAULT_PORT;
 std::vector<network_t> m_servers;
 std::mutex m_mutex;
 int num_connected = 0;	// 延べ接続テイカー
