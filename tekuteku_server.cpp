@@ -38,6 +38,7 @@
 	#include <boost/beast/websocket/ssl.hpp>
 #endif
 #include <boost/format.hpp>
+#include <boost/process.hpp>
 
 #include <json.hpp>
 #include <k_time.hpp>
@@ -56,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-07-18";
+static std::string m_version = "build 2024-08-14";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -64,8 +65,8 @@ static std::mutex m_mutex_log;
 static int session_timeout = 21600;
 static int debug_async_accept = 0;
 static int debug_async_read = 0;
-static int debug_async_write = 0;
-static int debug_async_write_full = 0;
+static int debug_write = 0;
+static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
 
 void truncate_log() {
@@ -318,7 +319,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 				x["whiteboard_size"] = m_whiteboard.size();
 				if ( t.is_init == true ) {
 					x["whiteboard"] = j_whiteboard_full;
-					t.is_init = false; debug_async_write_full++;
+					t.is_init = false; debug_write_full++;
 				}
 				else x["whiteboard"] = j_whiteboard;
 				r_json[p_ws] = x;
@@ -331,7 +332,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 			boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 			boost::system::error_code ec;
 			if (( p_ws )&&( p_ws->is_open() == true )) {
-				p_ws->async_write(b.data(),yield[ec]); debug_async_write++;
+				p_ws->write(b.data(),ec); debug_write++; // boost\beast\core\detail\stream_base.hpp(116) assert in raspberry-pi4 対策
 				if (ec) log((boost::format("write error %s (%s)\n") % get_taker_id(p_ws) % ec.message()).str());
 			}
 			else log((boost::format("write close %s\n") % get_taker_id(p_ws)).str());
@@ -356,7 +357,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 					}
 					boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 					boost::system::error_code ec;
-					p_ws->async_write(b.data(),yield[ec]); debug_async_write++;
+					p_ws->write(b.data(),ec); debug_write++; // boost\beast\core\detail\stream_base.hpp(116) assert in raspberry-pi4 対策
 					if (ec) {
 						log((boost::format("write error %s (%s)\n") % info.id % ec.message()).str());
 					}
@@ -371,6 +372,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 	try {
 		boost::system::error_code ec;
 		p_ws->async_accept(req,yield); debug_async_accept++;
+//		p_ws->text(false);
 
 		auto ep = boost::beast::get_lowest_layer(*p_ws).socket().remote_endpoint(ec);
 		taker_info_t info;
@@ -387,7 +389,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
 		boost::beast::flat_buffer b = copy_to_buffer(r.dump());
-		p_ws->async_write(b.data(),yield[ec]); debug_async_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
+		p_ws->write(b.data(),ec); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			m_takers[p_ws] = info;
@@ -399,13 +401,16 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			taker_info_t& info = m_takers[p_ws];
 
 			boost::beast::flat_buffer buffer;
-			p_ws->text(true);
 			p_ws->async_read(buffer,yield[ec]); debug_async_read++;
 			if ( ec == boost::beast::websocket::error::closed ) {
 				log((boost::format("read close %s\n") % info.id).str());
 				break;
 			}
+			#ifdef USE_SSL
+			if ( ec && ec != boost::asio::ssl::error::stream_truncated ) {
+			#else
 			if (ec) {
+			#endif
 				log((boost::format("read error %s (%s)\n") % info.id % ec.message()).str());
 				break;
 			}
@@ -521,6 +526,7 @@ boost::beast::string_view mime_type( boost::beast::string_view path ) {
 	if ( boost::beast::iequals(ext,".bmp" )) return "image/bmp";
 	if ( boost::beast::iequals(ext,".ico" )) return "image/vnd.microsoft.icon";
 	if ( boost::beast::iequals(ext,".svg" )) return "image/svg+xml";
+	if ( boost::beast::iequals(ext,".py"  )) return "text/html";
 	return "application/text";
 }
 
@@ -539,6 +545,60 @@ struct send_lambda {
 	}
 };
 
+class http_query_t {
+public:
+	http_query_t( std::string s ) { parse(s); };
+	~http_query_t() {};
+	void parse( std::string s ) {
+		m_mode = ( s.find("=") == std::string::npos ? 0:1 );
+		m_args.clear();
+		m_envs.clear();
+		std::string::size_type ii,jj;
+		switch (m_mode) {
+		case 0:
+			ii = 0;
+			jj = s.find_first_of("+"); if ( jj == std::string::npos ) jj = s.size();
+			while ( ii < s.size() ) {
+				std::string a = s.substr(ii,jj-ii);
+				m_args.push_back(a);
+				ii = jj+1;
+				jj = s.find_first_of("+",ii);
+				if ( jj == std::string::npos ) jj = s.size();
+			}
+			break;
+		case 1:
+			ii = 0;
+			jj = s.find_first_of("&"); if ( jj == std::string::npos ) jj = s.size();
+			while ( ii < s.size() ) {
+				std::string a = s.substr(ii,jj-ii);
+				std::string::size_type i = a.find("=");
+				m_envs[a.substr(0,i)] = ( i == std::string::npos ? "" : a.substr(i+1) );
+				ii = jj+1;
+				jj = s.find_first_of("&",ii);
+				if ( jj == std::string::npos ) jj = s.size();
+			}
+			break;
+		}
+	};
+	int mode() const { return m_mode; };
+	std::string args() const {
+		if ( m_mode != 0 ) return "";
+		std::string r;
+		std::for_each(m_args.begin(),m_args.end(),[&r]( const auto& c ){ r += (" "+c); });
+		return r;
+	};
+	std::string env( const std::string& key ) const {
+		if ( m_mode != 1 ) return "";
+		auto ii = m_envs.find(key);
+		return ( ii == m_envs.end() ? "" : (*ii).second );
+	};
+
+private:
+	int m_mode;	// 0:args 1:envs
+	std::vector<std::string> m_args;
+	std::map<std::string,std::string> m_envs;
+};
+
 void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield ) {
 	boost::beast::error_code ec;
 	boost::asio::ip::tcp::socket& socket = boost::beast::get_lowest_layer(stream).socket();
@@ -550,34 +610,12 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	boost::beast::flat_buffer buffer;
 	boost::beast::http::request<boost::beast::http::string_body> req;
 
-	auto const bad_request = [&req](boost::beast::string_view why){
-		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::bad_request,req.version()};
+	auto const error_responce = [&req]( boost::beast::http::status status, boost::beast::string_view why ){
+		boost::beast::http::response<boost::beast::http::string_body> res{status,req.version()};
 		res.set(boost::beast::http::field::server,m_server_name);
 		res.set(boost::beast::http::field::content_type,"text/html");
 		res.keep_alive(req.keep_alive());
 		res.body() = std::string(why);
-		res.prepare_payload();
-		return res;
-	};
-
-	// Returns a not found response
-	auto const not_found = [&req](boost::beast::string_view target){
-		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::not_found,req.version()};
-		res.set(boost::beast::http::field::server,m_server_name);
-		res.set(boost::beast::http::field::content_type,"text/html");
-		res.keep_alive(req.keep_alive());
-		res.body() = "The resource '" + std::string(target) + "' was not found.";
-		res.prepare_payload();
-		return res;
-	};
-
-	// Returns a server error response
-	auto const server_error = [&req](boost::beast::string_view what){
-		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::internal_server_error,req.version()};
-		res.set(boost::beast::http::field::server,m_server_name);
-		res.set(boost::beast::http::field::content_type,"text/html");
-		res.keep_alive(req.keep_alive());
-		res.body() = "An error occurred: '" + std::string(what) + "'";
 		res.prepare_payload();
 		return res;
 	};
@@ -595,44 +633,67 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		if (!m_magic.empty()) {
 			std::string::size_type x = req.target().find("?");
 			std::string query = ( x != std::string::npos ? req.target().substr(x) : "" );
-			if ( query != ("?magic="+m_magic) ) return send(bad_request("authentication failure"));
+			if ( query != ("?magic="+m_magic) ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
 		}
 		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
 		boost::asio::spawn(boost::beast::get_lowest_layer(*p_ws).socket().get_executor(),std::bind(&exec_websocket_session,p_ws,req,std::placeholders::_1));
 		return;
 	}
 
-	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return send(bad_request("Unknown HTTP-method"));
-	if ( req.target().empty() || req.target()[0] != '/' || req.target().find("..") != boost::beast::string_view::npos ) return send(bad_request("Illegal request-target"));
-	std::string target = req.target();
-	if (!m_magic.empty()) {
-		std::string::size_type x = target.find("?");
-		std::string query = ( x != std::string::npos ? target.substr(x) : "" );
-		target = target.substr(0,x);
-		if (( target == "/" || target == "/index.html" )&&( query != ("?magic="+m_magic) )) return send(bad_request("authentication failure"));
-	}
-	std::string path = "." + target + ( target.back() == '/' ? "index.html" : "" );
-	boost::beast::http::file_body::value_type body;
-	body.open(path.c_str(),boost::beast::file_mode::scan,ec);
-	if ( ec == boost::system::errc::no_such_file_or_directory ) return send(not_found(req.target()));
-	if (ec) return send(server_error(ec.message()));
+	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return send(error_responce(boost::beast::http::status::bad_request,"Unknown HTTP-method"));
+	if ( req.target().empty() || req.target()[0] != '/' || req.target().find("..") != boost::beast::string_view::npos ) return send(error_responce(boost::beast::http::status::bad_request,"Illegal request-target"));
 
-	auto const size = body.size();
-	if ( req.method() == boost::beast::http::verb::head ) {
-		boost::beast::http::response<boost::beast::http::empty_body> res{boost::beast::http::status::ok,req.version()};
-		res.set(boost::beast::http::field::server,m_server_name);
-		res.set(boost::beast::http::field::content_type,mime_type(path));
-		res.content_length(size);
-		res.keep_alive(req.keep_alive());
-		return send(std::move(res));
-	}
-	// GET
-	boost::beast::http::response<boost::beast::http::file_body> res{std::piecewise_construct,std::make_tuple(std::move(body)),std::make_tuple(boost::beast::http::status::ok,req.version())};
+	std::string target = req.target();
+	std::string::size_type i_query = target.find("?");
+	std::string::size_type i_anchor = target.find("#");
+	std::string path = target.substr(0,i_query);
+	std::string query = ( i_query == std::string::npos ? "" : target.substr(i_query+1,i_anchor) );
+	std::string anchor = ( i_anchor == std::string::npos ? "" : target.substr(i_anchor+1) );
+	std::string path_ex = ( path.find_last_of(".") == std::string::npos ? "" : path.substr(path.find_last_of(".")+1) );
+	http_query_t http_query(query);
+	if ( !m_magic.empty() && http_query.env("magic") != m_magic ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
+
+	boost::beast::http::response<boost::beast::http::empty_body> res{boost::beast::http::status::ok,req.version()};
 	res.set(boost::beast::http::field::server,m_server_name);
-	res.set(boost::beast::http::field::content_type,mime_type(path));
-	res.content_length(size);
 	res.keep_alive(req.keep_alive());
-	return send(std::move(res));
+
+	if ( path_ex == "py" ) {
+		boost::beast::http::string_body::value_type body;
+		boost::process::ipstream is;
+		std::error_code ec;
+		boost::process::child c("."+path+http_query.args(),boost::process::std_out>is,ec);
+		if (!ec) {
+			bool end_of_header = false;
+			std::string x;
+			while ( is && std::getline(is,x) ) { if (end_of_header) { body += (x+"\n"); } if (x.empty()) { end_of_header = true; } } // getline は改行コードを含まない
+			c.wait();
+			auto const size = body.size();
+			res.set(boost::beast::http::field::content_type,"text/html");
+			res.content_length(size);
+			if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
+			boost::beast::http::response<boost::beast::http::string_body> res_x{res};
+			res_x.body() = std::move(body);
+			return send(std::move(res_x));
+		}
+		else {
+			std::string m = (boost::format("error (value,category,message) = (%d,%s,%s)") % ec.value() % ec.category().name() % ec.message() ).str();
+			send(error_responce(boost::beast::http::status::internal_server_error,m)); // 500
+		}
+	}
+	else {
+		std::string file_path = "." + path + ( path.back() == '/' ? "index.html" : "" );
+		boost::beast::http::file_body::value_type body;
+		body.open(file_path.c_str(),boost::beast::file_mode::scan,ec);
+		if ( ec == boost::system::errc::no_such_file_or_directory ) return send(error_responce(boost::beast::http::status::not_found,req.target()));
+		if (ec) return send(error_responce(boost::beast::http::status::internal_server_error,ec.message()));
+		auto const size = body.size();
+		res.set(boost::beast::http::field::content_type,mime_type(file_path));
+		res.content_length(size);
+		if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
+		boost::beast::http::response<boost::beast::http::file_body> res_x{res};
+		res_x.body() = std::move(body);
+		return send(std::move(res_x));
+	}
 }
 
 #ifdef USE_SSL
@@ -699,8 +760,8 @@ void terminate_server() {
 	if (true) log_whiteboard();
 	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
 	log((boost::format("debug_async_read = %d\n") % debug_async_read).str());
-	log((boost::format("debug_async_write = %d\n") % debug_async_write).str());
-	log((boost::format("debug_async_write_full = %d\n") % debug_async_write_full).str());
+	log((boost::format("debug_write = %d\n") % debug_write).str());
+	log((boost::format("debug_write_full = %d\n") % debug_write_full).str());
 	log((boost::format("debug_whiteboard_update = %d\n") % debug_whiteboard_update).str());
 	log("service stopped\n");
 }
@@ -834,7 +895,8 @@ int main( int argc, char** argv ) {
 		#else
 		sigset_t sigset;
 		sigemptyset(&sigset);
-		if ( sigfillset(&sigset) != 0 ) log("error in sigfillset\n");
+		sigfillset(&sigset);
+		sigdelset(&sigset,SIGCHLD);
 		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n");
 		int signum;
 		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-07-23</title>
+<title>てくてくノート ver 2024-08-14</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -23,7 +23,7 @@
 	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
 	<div class="input-group">
 	<div class="btn-group m-2 taker-voice-recognition">
-		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" data-bs-toggle="tooltip" data-bs-placement="top" title="不明" disabled>音声認識開始</button>
+		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
 		<div class="dropdown" id="recognition-engine">
 			<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
 			<ul class="dropdown-menu">
@@ -100,6 +100,9 @@
 		<button class="btn btn-outline-secondary btn-sm" id="shortcut-save">保存</button>
 	</div>
 	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
+	<div id="pi-control" class="m-2 pt-auto">
+		<a class="btn btn-outline-info" href="./pi-status.py" target="_blank">ラズパイネットワーク確認</a>
+	</div>
 </div>
 </div>
 </div>
@@ -400,6 +403,9 @@ class mic_device_t {
 		this.init().then(()=>{
 			this.#source.disconnect();
 			this.#stream.getTracks().forEach( track => track.stop() );
+			$('#recognition-control')
+				.attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label})
+				.map(function(i,e){ new bootstrap.Tooltip(e,{trigger:'hover'}); });
 		});
 	}
 	async init() {
@@ -411,7 +417,6 @@ class mic_device_t {
 		const l = await navigator.mediaDevices.enumerateDevices();
 		let label;
 		l.forEach((device)=>{ if ( device.kind == 'audioinput' && device.deviceId == device_id ) { label = device.label; }; });
-		bootstrap.Tooltip.getInstance(this.#ui_element).setContent({'.tooltip-inner':label});
 		this.label = label;
 	}
 	update() {
@@ -574,7 +579,8 @@ function update_table_takers() {
 	$('td.teku').css('background-image',mk_guide());
 }
 
-function receive(event) {
+async function receive(event) {
+//	var responce = JSON.parse( await event.data.text() );
 	var responce = JSON.parse(event.data);
 	switch ( responce.type ) {
 	case 0 :
@@ -584,8 +590,9 @@ function receive(event) {
 	case 1 :
 		responce.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
 		whiteboard.splice(responce.whiteboard_size);
+		if ( responce.whiteboard_size == 0 ) { $('#whiteboard-table').empty(); }
 		let t = $('#whiteboard-table > tr > td');
-		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning');
+		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning'); // whiteboard-table は縮小せず空白に。
 		responce.whiteboard.forEach((c)=>{
 			let o = whiteboard[c.i];
 			let s = translate_text(o).replace(/\n/g,'<br>');
@@ -716,7 +723,6 @@ function shortcut_to_cookie() {
 }
 
 $(document).ready( function(){
-	$('#recognition-control').map(function(i,e){ new bootstrap.Tooltip(e,{trigger:'hover'}); });
 	set_font_size('fs-4');
 	set_theme('dark');
 	set_screen_mode(0);
@@ -775,7 +781,7 @@ $(document).ready( function(){
 	});
 	$('#recognition-control').on('click',function(event){
 		switch ( $('#recognition-control').val() ) {
-			case '0' : { recognizer.start(); mic_device.start(); break; }
+			case '0' : { if ( mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); } recognizer.start(); mic_device.start(); break; }
 			case '2' : { recognizer.stop(); mic_device.stop(); break; }
 			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
 		}
@@ -963,9 +969,11 @@ $(document).ready( function(){
 				$('#translate-lang').show();
 			}
 		}
-		if ( use_voice_recognition() == true ) { mic_device = new mic_device_t('#recognition-control'); $('#recognition-engine').trigger('hide.bs.dropdown'); }
+		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
 		if ( location.protocol == 'https:' ) { $('#clear').show(); } else { $('#clear').hide(); }
 	});
+
+	fetch('./pi-status.py').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } else { $('#pi-control').hide(); } });
 });
 </script>
 </body>
