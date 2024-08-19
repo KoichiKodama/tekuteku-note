@@ -970,7 +970,8 @@ $(document).ready( function(){
 		if ( location.protocol == 'https:' ) { $('#clear').show(); } else { $('#clear').hide(); }
 	});
 
-	fetch('./pi-status.py').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } else { $('#pi-control').hide(); } });
+	$('#pi-control').hide();
+	if ( location.protocol == 'https:' ) { fetch('./pi-status.py').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } }); }
 });
 </script>
 </body>
