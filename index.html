@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-08-14</title>
+<title>てくてくノート ver 2024-08-20</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -393,20 +393,14 @@ class mic_device_t {
 	#source;
 	#data;
 	#timer;
-	label = '不明';
+	#tooltip;
+	label = '未確認';
 
 	constructor(s) {
 		this.#ui_element = s;
 		this.#timer = 0;
 		this.#context = new AudioContext();
 		this.#analyzer = this.#context.createAnalyser();
-		this.init().then(()=>{
-			this.#source.disconnect();
-			this.#stream.getTracks().forEach( track => track.stop() );
-			$('#recognition-control')
-				.attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label})
-				.map(function(i,e){ new bootstrap.Tooltip(e,{trigger:'hover'}); });
-		});
 	}
 	async init() {
 		this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -426,10 +420,11 @@ class mic_device_t {
 		$(this.#ui_element).css('background-color','rgb(0,'+pk+',0)');
 	}
 	start() {
-		if ( this.label == '不明' ) return;
 		this.init().then(()=>{
 			if ( this.#context.state !== 'running' ) { this.#context.resume(); }
 			this.#timer = setInterval(()=>{this.update();},100);
+			$(this.#ui_element).attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label});
+			this.#tooltip = new bootstrap.Tooltip($(this.#ui_element)[0],{trigger:'hover'});
 		});
 	}
 	stop() {
@@ -438,6 +433,8 @@ class mic_device_t {
 			this.#timer = 0;
 			this.#source.disconnect();
 			this.#stream.getTracks().forEach( track => track.stop() );
+			this.#tooltip.dispose();
+			$(this.#ui_element).removeAttr('data-bs-toggle data-bs-placement title');
 		}
 	}
 }

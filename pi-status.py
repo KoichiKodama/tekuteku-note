@@ -58,13 +58,13 @@ Content-Type: text/html
 
 fmt_w_btn_top = '''\
 <tr><td rowspan="{1}">WiFi</td><td>{0}</td>
-<td value="{0}">未接続<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true" style="display:none;"></span></td>
+<td value="{0}">未接続</td>
 <td><button class="btn btn-outline-success pi-connect" value="{0}">接続する</button></td></tr>
 '''
 
 fmt_w_btn = '''\
 <tr><td>{0}</td>
-<td value="{0}">未接続<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true" style="display:none;"></span></td>
+<td value="{0}">未接続</td>
 <td><button class="btn btn-outline-success pi-connect" value="{0}">接続する</button></td></tr>
 '''
 
@@ -122,7 +122,7 @@ $(document).ready( function(){
 			.done((data)=>{	if ( data.status == 0 ) { alert("接続エラーです"); } })
 			.fail(()=>{ alert("通信エラーです"); })
 			.always(()=>{ location.reload(); });
-		$(`td[value="${ssid}"] span.spinner-border`).show();
+		$(`td[value="${ssid}"]`).html('接続中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
 	});
 });
 </script>
