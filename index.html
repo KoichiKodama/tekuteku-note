@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-08-20</title>
+<title>てくてくノート ver 2024-08-30</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -731,8 +731,8 @@ $(document).ready( function(){
 	window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
 	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); });
-	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
-	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.offsetHeight < 5 ? true:false ); });
+	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
+	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
 	$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
 
 	$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_theme($(clickEvent.target).data('theme')); } });
