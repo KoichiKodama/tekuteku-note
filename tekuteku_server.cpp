@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-08-14";
+static std::string m_version = "build 2024-09-03";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -224,7 +224,7 @@ std::vector<std::string> split( const std::string& x ) {
 }
 
 void log_whiteboard() {
-	log("==== whiteboard ====\n");
+	log((boost::format("==== whiteboard (%d) ====\n") % m_whiteboard.size()).str());
 	std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){
 		const std::vector<std::string> l = split(c.text);
 		std::for_each(l.begin(),l.end(),[]( const auto& s ){ log(s+"\n"); });
@@ -755,8 +755,8 @@ void terminate_server() {
 	#ifdef _WINDOWS
 	wd.stop(); thread_wd.join();
 	#endif
-	ioc_r.stop(); thread_r.join();
 	ioc_w.stop(); thread_w.join();
+	ioc_r.stop(); thread_r.join();
 	if (true) log_whiteboard();
 	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
 	log((boost::format("debug_async_read = %d\n") % debug_async_read).str());
@@ -847,8 +847,15 @@ int main( int argc, char** argv ) {
 
 		log((boost::format("started %s\n") % m_version).str());
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
-		if ( m_servers.empty() ) log("no network");
+		if ( m_servers.empty() ) log("no network\n");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+
+		#ifndef _WINDOWS
+		sigset_t sigset;
+		sigemptyset(&sigset);
+		sigaddset(&sigset,SIGTERM);
+		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n"); // thread 生成前に signal mask を行う。
+		#endif
 
 		thread_r = std::move(std::thread([]{
 			auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
@@ -893,11 +900,6 @@ int main( int argc, char** argv ) {
 		}
 		while ( tray_loop(1) == 0 ) {}
 		#else
-		sigset_t sigset;
-		sigemptyset(&sigset);
-		sigfillset(&sigset);
-		sigdelset(&sigset,SIGCHLD);
-		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n");
 		int signum;
 		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");
 		terminate_server();

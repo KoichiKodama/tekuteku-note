@@ -1,0 +1,13 @@
+[Unit]
+Description=tekuteku-note
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/sien/tekuteku-note/tekuteku-note.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
