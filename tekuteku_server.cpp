@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-09-03";
+static std::string m_version = "build 2024-09-04";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -646,12 +646,15 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	std::string target = req.target();
 	std::string::size_type i_query = target.find("?");
 	std::string::size_type i_anchor = target.find("#");
-	std::string path = target.substr(0,i_query);
+	std::string path = target.substr(0,i_query); if ( path.back() == '/' ) path += "index.html";
 	std::string query = ( i_query == std::string::npos ? "" : target.substr(i_query+1,i_anchor) );
 	std::string anchor = ( i_anchor == std::string::npos ? "" : target.substr(i_anchor+1) );
 	std::string path_ex = ( path.find_last_of(".") == std::string::npos ? "" : path.substr(path.find_last_of(".")+1) );
 	http_query_t http_query(query);
-	if ( !m_magic.empty() && http_query.env("magic") != m_magic ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
+	if ( path == "/index.html" && !m_magic.empty() && http_query.env("magic") != m_magic ) {
+		// magic 確認は index.html に限定
+		return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
+	}
 
 	boost::beast::http::response<boost::beast::http::empty_body> res{boost::beast::http::status::ok,req.version()};
 	res.set(boost::beast::http::field::server,m_server_name);
@@ -681,7 +684,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		}
 	}
 	else {
-		std::string file_path = "." + path + ( path.back() == '/' ? "index.html" : "" );
+		std::string file_path = "." + path;
 		boost::beast::http::file_body::value_type body;
 		body.open(file_path.c_str(),boost::beast::file_mode::scan,ec);
 		if ( ec == boost::system::errc::no_such_file_or_directory ) return send(error_responce(boost::beast::http::status::not_found,req.target()));
