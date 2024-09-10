@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-09-04</title>
+<title>てくてくノート ver 2024-09-10</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -101,7 +101,7 @@
 	</div>
 	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
 	<div id="pi-control" class="m-2 pt-auto">
-		<a class="btn btn-outline-info" href="./pi-status.py" target="_blank">ラズパイネットワーク確認</a>
+		<a class="btn btn-outline-info" href="./pi-status.py" target="_blank">ラズパイ確認</a>
 	</div>
 </div>
 </div>
@@ -504,6 +504,7 @@ function send( status ) {
 			}
 		}
 		socket.send(JSON.stringify(responce));
+//		socket.send(new Blob([JSON.stringify(responce)],{type:"application/json",}));
 	}
 }
 
@@ -577,7 +578,7 @@ function update_table_takers() {
 }
 
 async function receive(event) {
-//	var responce = JSON.parse( await event.data.text() );
+//	var responce = JSON.parse( await event.data.text() ); // for binary
 	var responce = JSON.parse(event.data);
 	switch ( responce.type ) {
 	case 0 :

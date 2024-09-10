@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-09-04";
+static std::string m_version = "build 2024-09-10";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -245,8 +245,8 @@ public:
 	virtual ~request_broadcast_event_t() {};
 	void set() {
 		{
-		std::lock_guard<std::mutex> lock(m_mtx);
-		m_requested = true;
+			std::lock_guard<std::mutex> lock(m_mtx);
+			m_requested = true;
 		}
 		m_cv.notify_all();
 	};
@@ -257,7 +257,7 @@ public:
 		m_requested = false;
 		return ( m_stop == true ? false : true );
 	};
-	bool is_stopped() { return m_stop; };
+	bool is_stopped() const { return m_stop; };
 private:
 	bool m_requested;
 	bool m_stop;
@@ -803,10 +803,7 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 		s += load_file_all(fname_cer_chain);
 	}
 	ctx.use_certificate_chain(boost::asio::const_buffer(boost::asio::buffer(s)));
-//	ctx.use_certificate_chain_file(fname_cer.c_str());
-	ctx.set_options( 
-		boost::asio::ssl::context::default_workarounds |
-		boost::asio::ssl::context::no_sslv2 );
+	ctx.set_options(boost::asio::ssl::context::default_workarounds|boost::asio::ssl::context::no_sslv2);
 }
 #endif
 
@@ -848,6 +845,7 @@ int main( int argc, char** argv ) {
 		}
 		#endif
 
+		m_whiteboard.reserve(4096);
 		log((boost::format("started %s\n") % m_version).str());
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) log("no network\n");
