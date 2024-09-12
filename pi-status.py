@@ -126,7 +126,8 @@ for i,c in enumerate(connections_wifi) :
 
 html += '''\
 </table>
-<div class="alert alert-warning m-2 mx-auto text-center">WiFiの接続先を変えるとラズパイとの接続は切断されます。<br>その場合は再接続して下さい。</div>
+<div class="alert alert-dark m-2 mx-auto text-center">WiFiの接続先を変えるとラズパイとの接続は切断されます。<br>その場合は再接続して下さい。</div>
+<div class="alert alert-dark m-2 mx-auto text-center">この<a href="./ssl-keys/tekuteku-pi.cer">自己証明書</a>をインストールすると警告は出なくなります。</div>
 </div>
 </div>
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
