@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-09-10</title>
+<title>てくてくノート ver 2024-09-25</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -668,6 +668,7 @@ function set_screen_mode(mode) {
 	case 1:
 	case 2:
 		$('.taker,.taker-voice-recognition,.taker-extra').hide();
+		if ( is_small_screen() == false ) { $('#host').show(); }
 		set_theme('dark');
 		break;
 	}

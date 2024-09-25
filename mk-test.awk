@@ -30,7 +30,7 @@ BEGIN{
 		gsub(/\^/,"{^}",c);
 		gsub(/\+/,"{+}",c);
 		printf("[System.Windows.Forms.SendKeys]::SendWait(\"%s\")\n",c);
-		print "start-sleep -m 10";
+		print "start-sleep -m 50"; # 10ms では raspberry pi4 でネットワーク切断が時々発生する。
 	}
 	printf("[System.Windows.Forms.SendKeys]::SendWait(\"{ENTER}\")\n");
 	print "start-sleep -m 500";
