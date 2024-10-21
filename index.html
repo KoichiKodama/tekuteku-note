@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-09-25</title>
+<title>てくてくノート ver 2024-10-21</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -650,7 +650,7 @@ function set_theme(theme) {
 	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
 }
 
-function is_small_screen() { return ( $(window).width() < 992 )||( window.visualViewport.height < 660 ); }
+function is_small_screen() { return ( $(window).width() < 768 )||( window.visualViewport.height < 510 ); } // 992,660
 
 function set_screen_mode(mode) {
 	if ( mode != null ) {
