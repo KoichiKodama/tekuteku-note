@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-10-21</title>
+<title>てくてくノート ver 2024-11-20</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -160,6 +160,7 @@ var whiteboard = [];
 var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
 var my_text_previous = '';
 var m_takers = [];
+var reset_timer; // 強制消去用タイマー
 
 var recognizer = null;
 var recognition_local = false;
@@ -520,6 +521,7 @@ function open( host ) {
 	socket.onclose = function(event){ close(); };
 	socket.onerror = function(event){} // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
+	window.clearTimeout(reset_timer);
 }
 
 function close() {
@@ -528,6 +530,7 @@ function close() {
 	$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
 	if ( $('#host').is(':hidden') ) { $('#whiteboard-div').addClass(k_warning); }
 	connected = false;
+	reset_timer = window.setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
 }
 
 async function host_select(hosts) {
