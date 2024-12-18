@@ -10,7 +10,8 @@ class connection_t:
 		self.status = status	# 0:未接続 1:接続中 9:利用不可
 		self.addr = addr
 
-known_connections = ['AUEWLAN','kodama-420','eth0','sim','kodama-home']
+wifi_dev = 'wlan0'
+known_connections = ['AUEWLAN','auewlan@sien','kodama-420','eth0','sim','sim-nttpc','kodama-home']
 connections_wifi = []
 connections_ethernet = []
 
@@ -35,7 +36,7 @@ for s in l[1:len(l)] :
 				connections_ethernet.append(connection_t(name,device,status,addr))
 
 wifi_found = {}
-r = subprocess.run(shlex.split('sudo nmcli -f SSID,SIGNAL dev wifi list ifname wlan0 -rescan yes'),stdout=subprocess.PIPE,encoding='utf-8')
+r = subprocess.run(shlex.split('sudo nmcli -f SSID,SIGNAL dev wifi list ifname {0}'.format(wifi_dev)),stdout=subprocess.PIPE,encoding='utf-8')
 l = r.stdout.splitlines()
 for s in l[1:len(l)] :
 	a = s.split()
@@ -126,6 +127,8 @@ for i,c in enumerate(connections_wifi) :
 
 html += '''\
 </table>
+<div class="row m-2"><button class="btn btn-outline-success" id="pi-rescan">リスト更新</button></div>
+<div class="row m-2"><button class="btn btn-outline-danger" id="pi-shutdown">シャットダウン</button></div>
 <div class="alert alert-dark m-2 mx-auto text-center">WiFiの接続先を変えるとラズパイとの接続は切断されます。<br>その場合は再接続して下さい。</div>
 <div class="alert alert-dark m-2 mx-auto text-center">この<a href="./ssl-keys/tekuteku-pi.cer">自己証明書</a>をインストールすると警告は出なくなります。</div>
 </div>
@@ -151,6 +154,19 @@ $(document).ready( function(){
 			.fail(()=>{ alert("通信エラーです"); })
 			.always(()=>{ location.reload(); });
 		$(`td[value="${ssid}"]`).html('切断中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
+	});
+	$('button#pi-rescan').on('click',function(){
+		$.ajax("./pi-control.py?rescan",{ method: 'get', async: true, dataType: 'json' })
+			.done((data)=>{	if ( data.status == 0 ) { alert("接続エラーです"); } })
+			.fail(()=>{ alert("通信エラーです"); })
+			.always(()=>{ location.reload(); });
+	});
+	$('button#pi-shutdown').on('click',function(){
+		if ( window.confirm('ラズパイをシャットダウンして良いですか？') == true ) {
+			$.ajax("./pi-control.py?shutdown",{ method: 'get', async: true, dataType: 'json' })
+				.done((data)=>{ if ( data.status == 0 ) { alert("シャットダウン失敗です"); } else { window.close(); } })
+				.fail(()=>{ alert("シャットダウン失敗です"); })
+		}
 	});
 });
 </script>

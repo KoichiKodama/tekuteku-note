@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-11-20</title>
+<title>てくてくノート ver 2024-12-18</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -12,8 +12,8 @@
 <body>
 <div class="container-fluid">
 <div class="row">
-<div class="col col-lg-10">
-	<div id="host" class="taker-extra w-100 px-3 py-2 m-2 rounded-2 text-truncate fs-taker"></div>
+<div class="col col-10">
+	<div id="host" class="w-100 px-3 py-2 m-2 rounded-2 text-truncate fs-taker"></div>
 	<div class="bg-dark" style="display:none;" id="whiteboard-exclude"></div>
 	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;" id="whiteboard-div">
 		<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
@@ -21,7 +21,38 @@
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
 	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
-	<div class="input-group">
+</div>
+<div class="col col-2 taker-extra">
+	<div class="input-group m-2"><span class="input-group-text">F1</span><input type="text" id="key-1" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F2</span><input type="text" id="key-2" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F3</span><input type="text" id="key-3" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F4</span><input type="text" id="key-4" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F5</span><input type="text" id="key-5" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F6</span><input type="text" id="key-6" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F7</span><input type="text" id="key-7" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F8</span><input type="text" id="key-8" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text">F9</span><input type="text" id="key-9" class="form-control" value=""/></div>
+	<div class="input-group m-2">
+		<div class="dropdown" id="shortcut">
+			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">短縮キー</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item" data-job="load">読込</li>
+			<li class="dropdown-item" data-job="save">保存</li>
+			</ul>
+			<input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
+		</div>
+	</div>
+	<!--<div class="input-group m-2">
+		<button class="btn btn-outline-secondary" id="share-app" value="0">アプリ共有</button>
+	</div>-->
+	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
+	<div id="pi-control" class="m-2 pt-auto">
+		<a class="btn btn-outline-info" href="./pi-status.py" target="_blank">ラズパイ確認</a>
+	</div>
+</div>
+</div>
+<div class="row">
+<div class="input-group">
 	<div class="btn-group m-2 taker-voice-recognition">
 		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
 		<div class="dropdown" id="recognition-engine">
@@ -57,6 +88,7 @@
 			<li class="dropdown-item" data-mode="0">ノートテイク</li>
 			<li class="dropdown-item" data-mode="1">見るだけ</li>
 			<li class="dropdown-item" data-mode="2">見るだけ字幕</li>
+			<li class="dropdown-item" data-mode="3">見るだけプロンプター</li>
 			</ul>
 		</div>
 		<div class="dropdown" id="font-size">
@@ -84,27 +116,6 @@
 	</div>
 	</div>
 </div>
-<div class="col col-2 taker-extra">
-	<div class="input-group m-2"><span class="input-group-text">F1</span><input type="text" id="key-1" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F2</span><input type="text" id="key-2" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F3</span><input type="text" id="key-3" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F4</span><input type="text" id="key-4" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F5</span><input type="text" id="key-5" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F6</span><input type="text" id="key-6" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F7</span><input type="text" id="key-7" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F8</span><input type="text" id="key-8" class="form-control" value=""/></div>
-	<div class="input-group m-2"><span class="input-group-text">F9</span><input type="text" id="key-9" class="form-control" value=""/></div>
-	<div class="btn-group m-2">
-		<span class="input-group-text">短縮キー</span>
-		<button class="btn btn-outline-secondary btn-sm" id="shortcut-load">読込</button><input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
-		<button class="btn btn-outline-secondary btn-sm" id="shortcut-save">保存</button>
-	</div>
-	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
-	<div id="pi-control" class="m-2 pt-auto">
-		<a class="btn btn-outline-info" href="./pi-status.py" target="_blank">ラズパイ確認</a>
-	</div>
-</div>
-</div>
 </div>
 
 <div class="modal fade" id="dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
@@ -130,6 +141,21 @@
 </div>
 </div>
 </div>
+	
+<!--<div class="modal fade" id="share-app-dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal-dialog">
+<div class="modal-content">
+	<div class="modal-body">
+		<div class="alert alert-warning text-center">共有したいアプリのURLを貼り付けて下さい</div>
+		<input class="form-control" type="text" id="share-app-url"/>
+	</div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-primary" id="share-app-ok">決定</button>
+		<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+	</div>
+</div>
+</div>
+</div>-->
 	
 <div style="display:none;">
 <input id="ami-voice-authorization" type="text" />
@@ -161,6 +187,8 @@ var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の�
 var my_text_previous = '';
 var m_takers = [];
 var reset_timer; // 強制消去用タイマー
+var shared_app_url = '';
+// var shared_app_window = null;
 
 var recognizer = null;
 var recognition_local = false;
@@ -490,7 +518,7 @@ function my_split(s,min_length,max_length,lang) {
 function send( status ) {
 	if ( connected == true ) {
 		var responce = new Object();
-		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),全データ要求(9),黒板クリア(8)
+		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
 		if ( status != 8 && screen_mode == 0 ) {
 			responce.text = $('#my-text').val();
 			responce.text_index = my_text_index;
@@ -504,6 +532,7 @@ function send( status ) {
 				});
 			}
 		}
+		if ( status == 3 ) responce.shared_app = shared_app_url;
 		socket.send(JSON.stringify(responce));
 //		socket.send(new Blob([JSON.stringify(responce)],{type:"application/json",}));
 	}
@@ -512,23 +541,22 @@ function send( status ) {
 const k_success = 'text-success-emphasis bg-success-subtle border border-success-subtle';
 const k_warning = 'text-warning-emphasis bg-warning-subtle border border-warning-subtle';
 
-function open( host ) {
+function socket_open( host ) {
 	let url = ( location.protocol == 'http:' ? 'ws://' : 'wss://' )+host+location.search;
-	if ( connected == true ) { close(); }
+	if ( connected == true ) { socket_close(); }
 	socket = new WebSocket(url);
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
 	socket.onopen = function(event){ connected = true; send(9); };
-	socket.onclose = function(event){ close(); };
+	socket.onclose = function(event){ socket_close(); };
 	socket.onerror = function(event){} // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
 	window.clearTimeout(reset_timer);
 }
 
-function close() {
+function socket_close() {
 	socket.close();
 	socket = undefined;
 	$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
-	if ( $('#host').is(':hidden') ) { $('#whiteboard-div').addClass(k_warning); }
 	connected = false;
 	reset_timer = window.setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
 }
@@ -607,6 +635,14 @@ async function receive(event) {
 		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
 		m_takers = responce.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).concat();
 		update_table_takers();
+//		if ( shared_app_url != responce.shared_app ) {
+//			if ( shared_app_window != null ) {
+//				shared_app_window.close();
+//				shared_app_window = null;
+//			}
+//			if ( responce.shared_app.length != 0 ) shared_app_window = window.open(responce.shared_app);
+//			shared_app_url = responce.shared_app;
+//		}
 		break;
 	}
 }
@@ -653,13 +689,16 @@ function set_theme(theme) {
 	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
 }
 
-function is_small_screen() { return ( $(window).width() < 768 )||( window.visualViewport.height < 510 ); } // 992,660
+function is_small_screen() { return ( $(window).width() < 768 )||( window.visualViewport.height < 510 ); }
 
 function set_screen_mode(mode) {
 	if ( mode != null ) {
 		screen_mode = mode;
 		$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
 	}
+	$('div.container-fluid div.row:first-child').css('transform','');
+	const o = $('div.container-fluid > div.row:first-child > div.col:first-child');
+	if ( screen_mode != 0 || is_small_screen() ) { o.removeClass('col-10').addClass('col-12'); } else { o.removeClass('col-12').addClass('col-10'); }
 
 	switch(screen_mode) {
 	case 0:
@@ -668,6 +707,8 @@ function set_screen_mode(mode) {
 		if ( is_small_screen() ) { $('.taker-extra').hide(); } else { $('.taker-extra').show(); }
 		$('#my-text').attr('placeholder',( is_small_screen() ? "ここでテキスト入力" : "ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"));
 		break;
+	case 3:
+		$('div.container-fluid div.row:first-child').css('transform','scale(1,-1)');
 	case 1:
 	case 2:
 		$('.taker,.taker-voice-recognition,.taker-extra').hide();
@@ -675,15 +716,22 @@ function set_screen_mode(mode) {
 		set_theme('dark');
 		break;
 	}
-	$('#whiteboard-exclude').hide();
 
 	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
 	// iphone で $(...).scrollTop(val) が異様に遅くなる。
-	let x0 = Math.max(400,window.visualViewport.height);
-	let x1 = $('#whiteboard-div').height()+Math.floor(x0-$('div.container-fluid').height());
-	if ( screen_mode == 2 ) { if ( x1 > 150 ) { $('#whiteboard-exclude').css('height',(x1-150)+'px').show(); x1=150; } }
-	$('#whiteboard-div').height(x1);
-	window.scroll({top:Math.max(0,$('#screen-theme').parent().parent().offset().top-window.visualViewport.height),behavior:'instant'});
+
+	const minimum_whiteboard_height = 150;
+	let height_free = Math.floor(window.visualViewport.height-$('div.container-fluid').height());
+	let height_menu = $('#host').height()+$('div.container-fluid > div.row:last-child').height();
+	let height_whiteboard = $('#whiteboard-div').height()+height_free;
+	if ( height_whiteboard < minimum_whiteboard_height ) height_whiteboard += height_menu;
+	$('#whiteboard-exclude').hide();
+	if ( screen_mode == 2 && height_whiteboard > minimum_whiteboard_height ) {
+		$('#whiteboard-exclude').css('height',(height_whiteboard-minimum_whiteboard_height)+'px').show();
+		height_whiteboard = minimum_whiteboard_height;
+	}
+	$('#whiteboard-div').height(height_whiteboard);
+
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
 }
 
@@ -734,7 +782,7 @@ $(document).ready( function(){
 	const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
 	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
 	window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
-	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); close(); });
+	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
 	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); });
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
@@ -891,7 +939,24 @@ $(document).ready( function(){
 		}
 	});
 
-	$('#shortcut-load').on('click',function(event){ $('#shortcut-load-file').click(); });
+	async function save_shortcut() {
+		let a = [];
+		a.push(`F1 ${$('#key-1').val()}\n`);
+		a.push(`F2 ${$('#key-2').val()}\n`);
+		a.push(`F3 ${$('#key-3').val()}\n`);
+		a.push(`F4 ${$('#key-4').val()}\n`);
+		a.push(`F5 ${$('#key-5').val()}\n`);
+		a.push(`F6 ${$('#key-6').val()}\n`);
+		a.push(`F7 ${$('#key-7').val()}\n`);
+		a.push(`F8 ${$('#key-8').val()}\n`);
+		a.push(`F9 ${$('#key-9').val()}\n`);
+		const b = new Blob(a,{type:'text/plain'});
+		const f = await window.showSaveFilePicker({suggestedName:'shortcut.txt'});	// ファイル保存ダイアログを表示して FileSystemFileHandle オブジェクトを取得
+		const s = await f.createWritable();	// FileSystemWritableFileStream オブジェクトを取得
+		await s.write(b);	// テキストデータをファイルに書き込む
+		await s.close();	// ファイルを閉じる
+	}
+
 	$('#shortcut-load-file').on('change',function(){
 		if ( this.files.length == 1 ) {
 			var blob = this.files[0];
@@ -913,27 +978,16 @@ $(document).ready( function(){
 					}
 				});
 				$('#shortcut-load-file').val('');
-				$('#shortcut-load').blur();
 			};
 		}
 	});
-	$('#shortcut-save').click(async function(){
-		let a = [];
-		a.push(`F1 ${$('#key-1').val()}\n`);
-		a.push(`F2 ${$('#key-2').val()}\n`);
-		a.push(`F3 ${$('#key-3').val()}\n`);
-		a.push(`F4 ${$('#key-4').val()}\n`);
-		a.push(`F5 ${$('#key-5').val()}\n`);
-		a.push(`F6 ${$('#key-6').val()}\n`);
-		a.push(`F7 ${$('#key-7').val()}\n`);
-		a.push(`F8 ${$('#key-8').val()}\n`);
-		a.push(`F9 ${$('#key-9').val()}\n`);
-		const b = new Blob(a,{type:'text/plain'});
-		const f = await window.showSaveFilePicker({suggestedName:'shortcut.txt'});	// ファイル保存ダイアログを表示して FileSystemFileHandle オブジェクトを取得
-		const s = await f.createWritable();	// FileSystemWritableFileStream オブジェクトを取得
-		await s.write(b);	// テキストデータをファイルに書き込む
-		await s.close();	// ファイルを閉じる
-		$(this).blur();
+
+	$('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
+		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+			let job = $(clickEvent.target).data('job');
+			if ( job == 'load' ) { $('#shortcut-load-file').click(); }
+			if ( job == 'save') { save_shortcut(); }
+		}
 	});
 
 	switch ( location.protocol ) {
@@ -943,7 +997,7 @@ $(document).ready( function(){
 		case 'https:': 
 		case 'http:': 
 			host = location.host;
-			open(host);
+			socket_open(host);
 			break;
 	}
 
@@ -972,8 +1026,31 @@ $(document).ready( function(){
 			}
 		}
 		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
-		if ( location.protocol == 'https:' ) { $('#clear').show(); } else { $('#clear').hide(); }
+		if ( location.protocol == 'https:' ) { $('#clear').parent().show(); } else { $('#clear').parent().hide(); }
 	});
+
+//	$('#share-app').on('click',function(){
+//		get_app().then((ok)=>{
+//			if ( ok == true ) {
+//				shared_app_url = $('#share-app-url').val();
+//				send(3);
+//			}
+//		});
+//	});
+
+//	async function get_app() {
+//		let x = new bootstrap.Modal($('#share-app-dialog').get(0),{});
+//		let ok = false;
+//		let dialog = new Promise((resolve)=>{
+//			$('#share-app-ok').one('click',()=>{ ok=true; x.hide(); });
+//			$('#share-app-dialog')
+//				.off('hidden.bs.modal')
+//				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+//			x.show();
+//		});
+//		const result = await dialog;
+//		return ok;
+//	}
 
 	$('#pi-control').hide();
 	if ( location.protocol == 'https:' ) { fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } }); }

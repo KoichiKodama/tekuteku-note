@@ -11,7 +11,8 @@ class connection_t:
 		self.status = status	# 0:未接続 1:接続中 9:利用不可
 		self.addr = addr
 
-known_connections = ['AUEWLAN','kodama-420','eth0','sim']
+wifi_dev = 'wlan0'
+known_connections = ['AUEWLAN','auewlan@sien','kodama-420','eth0','sim','sim-nttpc']
 connections_wifi = []
 connections_ethernet = []
 
@@ -19,13 +20,24 @@ def print_responce(status,message) :
 	print('Content-Type: text/plain\n\n')
 	print(json.dumps({"status":status,"message":message})) # status : 0/失敗 1/成功
 
-if len(sys.argv) != 3 :
+if len(sys.argv) < 2 :
 	print_responce(0,"ssid-not-given")
 	sys.exit()
 
-ssid = sys.argv[2]
 job = sys.argv[1]
+ssid = sys.argv[2] if len(sys.argv) == 3 else ''
 match job :
+	case 'shutdown' :
+		print_responce(1,"done")
+		r = subprocess.run(shlex.split('sudo shutdown now'))
+		sys.exit()
+
+	case 'rescan' :
+#		r = subprocess.run(shlex.split('sudo nmcli -f SSID,SIGNAL dev wifi list ifname {0}'.format(wifi_dev)),stdout=subprocess.PIPE,encoding='utf-8')
+		r = subprocess.run(shlex.split('sudo nmcli -f SSID,SIGNAL dev wifi list ifname {0} -rescan yes'.format(wifi_dev)))
+		print_responce(1,"done")
+		sys.exit()
+
 	case 'connect' :
 		r = subprocess.run(shlex.split('sudo nmcli con'),stdout=subprocess.PIPE,encoding='utf-8',check=True)
 		l = r.stdout.splitlines()
