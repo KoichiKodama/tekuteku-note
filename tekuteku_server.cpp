@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2024-09-10";
+static std::string m_version = "build 2024-12-19";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -83,6 +83,7 @@ void truncate_log() {
 		if ( s.compare(0,date_min.length(),date_min) > 0 ) ofs << s << "\n";
 	}
 	ifs.close();
+	ofs.close();
 	std::filesystem::remove(fname_old);
 }
 
@@ -809,13 +810,13 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 
 int main( int argc, char** argv ) {
 	try {
+		truncate_log();
 		argc--; argv++;
 		while ( argc != 0 ) {
 			if ( strcmp(*argv,"--port") == 0 ) {
 				argc--; argv++;
 				m_port = atoi(*argv);
 				m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
-				truncate_log();
 				log(( boost::format("option port=%d\n") % m_port ).str());
 			}
 			#ifdef USE_SSL
