@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-12-18</title>
+<title>てくてくノート ver 2024-12-26</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -187,7 +187,8 @@ var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の�
 var my_text_previous = '';
 var m_takers = [];
 var reset_timer; // 強制消去用タイマー
-var shared_app_url = '';
+var minimum_container_height = 0;
+// var shared_app_url = '';
 // var shared_app_window = null;
 
 var recognizer = null;
@@ -532,7 +533,7 @@ function send( status ) {
 				});
 			}
 		}
-		if ( status == 3 ) responce.shared_app = shared_app_url;
+//		if ( status == 3 ) responce.shared_app = shared_app_url;
 		socket.send(JSON.stringify(responce));
 //		socket.send(new Blob([JSON.stringify(responce)],{type:"application/json",}));
 	}
@@ -689,9 +690,15 @@ function set_theme(theme) {
 	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
 }
 
-function is_small_screen() { return ( $(window).width() < 768 )||( window.visualViewport.height < 510 ); }
+function eval_minimum_container_height() {
+	let o = $('div.container-fluid > div.row > div.col:nth-child(2) > div:visible').last().get(0);
+	if ( o !== undefined ) minimum_container_height = Math.ceil(o.getBoundingClientRect().bottom+$('div.container-fluid > div.row:last-child').height())+10;
+}
+
+function is_small_screen() { return ( $(window).width() < 768 )||( window.visualViewport.height < minimum_container_height ); }
 
 function set_screen_mode(mode) {
+	eval_minimum_container_height();
 	if ( mode != null ) {
 		screen_mode = mode;
 		$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
@@ -721,9 +728,10 @@ function set_screen_mode(mode) {
 	// iphone で $(...).scrollTop(val) が異様に遅くなる。
 
 	const minimum_whiteboard_height = 150;
-	let height_free = Math.floor(window.visualViewport.height-$('div.container-fluid').height());
-	let height_menu = $('#host').height()+$('div.container-fluid > div.row:last-child').height();
-	let height_whiteboard = $('#whiteboard-div').height()+height_free;
+	let height_container = $('div.container-fluid').height();
+	let height_delta = Math.floor(window.visualViewport.height-height_container);
+	let height_menu = $('div.container-fluid > div.row:last-child').height();
+	let height_whiteboard = $('#whiteboard-div').height()+height_delta;
 	if ( height_whiteboard < minimum_whiteboard_height ) height_whiteboard += height_menu;
 	$('#whiteboard-exclude').hide();
 	if ( screen_mode == 2 && height_whiteboard > minimum_whiteboard_height ) {
