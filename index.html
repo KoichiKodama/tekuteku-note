@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2024-12-26</title>
+<title>てくてくノート ver 2024-12-27</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -727,12 +727,13 @@ function set_screen_mode(mode) {
 	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
 	// iphone で $(...).scrollTop(val) が異様に遅くなる。
 
-	const minimum_whiteboard_height = 150;
+	const minimum_whiteboard_height = 200;
 	let height_container = $('div.container-fluid').height();
 	let height_delta = Math.floor(window.visualViewport.height-height_container);
 	let height_menu = $('div.container-fluid > div.row:last-child').height();
 	let height_whiteboard = $('#whiteboard-div').height()+height_delta;
-	if ( height_whiteboard < minimum_whiteboard_height ) height_whiteboard += height_menu;
+	if ( is_small_screen() == true ) height_whiteboard += height_menu;
+	if ( height_whiteboard < minimum_whiteboard_height ) height_whiteboard = minimum_whiteboard_height;
 	$('#whiteboard-exclude').hide();
 	if ( screen_mode == 2 && height_whiteboard > minimum_whiteboard_height ) {
 		$('#whiteboard-exclude').css('height',(height_whiteboard-minimum_whiteboard_height)+'px').show();
@@ -741,6 +742,9 @@ function set_screen_mode(mode) {
 	$('#whiteboard-div').height(height_whiteboard);
 
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
+
+	// テキスト入力欄 (#my-text) が画面下部になる様にスクロール
+	window.scroll({top:Math.max(0,$('div.container-fluid > div.row:last-child').offset().top-window.visualViewport.height),behavior:'instant'});
 }
 
 function shortcut_from_cookie() {
@@ -787,11 +791,13 @@ $(document).ready( function(){
 	shortcut_from_cookie();
 	textarea_height = $('#my-text').height();
 
+	// 画面 resize は window ではなく window.visualViewport で処理する。
+	// #whiteboad-div の resize は見る必要ない。
 	const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
-	$('#whiteboard-div,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
+	$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
 	window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
+	$(window).on("load orientationchange",()=>{ set_screen_mode(); });
 	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
-	$(window).on("load orientationchange resize",()=>{ set_screen_mode(); });
 	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
 	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
 	$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
