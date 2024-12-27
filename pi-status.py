@@ -32,7 +32,7 @@ for s in l[1:len(l)] :
 		match kind :
 			case 'wifi' :
 				connections_wifi.append(connection_t(name,device,status,addr))
-			case 'ethernet' :
+			case 'ethernet' | 'gsm' :
 				connections_ethernet.append(connection_t(name,device,status,addr))
 
 wifi_found = {}
