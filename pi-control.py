@@ -12,7 +12,7 @@ class connection_t:
 		self.addr = addr
 
 wifi_dev = 'wlan0'
-known_connections = ['AUEWLAN','auewlan@sien','kodama-420','eth0','sim','sim-nttpc']
+known_connections = ['AUEWLAN','AUEWS','AUEWT','auewlan@sien','kodama-420','eth0','sim','sim-nttpc','kodama-home']
 connections_wifi = []
 connections_ethernet = []
 
