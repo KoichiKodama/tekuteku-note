@@ -240,7 +240,6 @@ boost::beast::flat_buffer copy_to_buffer( const std::string& s ) {
 	return b;
 }
 
-/*
 class request_broadcast_event_t {
 public:
 	request_broadcast_event_t() : m_requested(false),m_stop(false) {};
@@ -267,8 +266,8 @@ private:
 	std::condition_variable m_cv;
 };
 request_broadcast_event_t request_broadcast{};
-*/
 
+/*
 class request_broadcast_event_t {
 public:
 	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_stop(false),m_requested(false),m_timer(ioc) {};
@@ -300,6 +299,7 @@ private:
 };
 boost::asio::io_context ioc_r(1); static std::thread thread_r{};
 request_broadcast_event_t request_broadcast{ioc_r};
+*/
 
 const std::string get_taker_id( const std::shared_ptr<websocket_stream_t>& p_ws ) {
 	if ( m_takers.find(p_ws) == m_takers.end() ) return "erased-socket";
@@ -311,8 +311,8 @@ void broadcast_status( boost::asio::yield_context yield ) {
 	nlohmann::json j_whiteboard_full = nlohmann::json::array();
 
 	while (true) {
-//		if ( request_broadcast.wait() == false ) break;
-		if ( request_broadcast.wait(yield) == false ) break;
+		if ( request_broadcast.wait() == false ) break;
+//		if ( request_broadcast.wait(yield) == false ) break;
 
 		std::map<std::shared_ptr<websocket_stream_t>,nlohmann::json> r_json;
 		nlohmann::json j_takers;
@@ -786,15 +786,15 @@ private:
 network_watchdog wd; static std::thread thread_wd{};
 #endif
 
-// boost::asio::io_context ioc_w(1); static std::thread thread_w{};
-// boost::asio::io_context ioc_r(1); static std::thread thread_r{};
+boost::asio::io_context ioc_w(1); static std::thread thread_w{};
+boost::asio::io_context ioc_r(1); static std::thread thread_r{};
 
 void terminate_server() {
 	request_broadcast.stop();
 	#ifdef _WINDOWS
 	wd.stop(); thread_wd.join();
 	#endif
-//	ioc_w.stop(); thread_w.join();
+	ioc_w.stop(); thread_w.join();
 	ioc_r.stop(); thread_r.join();
 	if (true) log_whiteboard();
 	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
@@ -901,15 +901,15 @@ int main( int argc, char** argv ) {
 			#else
 			boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),std::ref(ctx),ep,std::placeholders::_1));
 			#endif
-			boost::asio::spawn(ioc_r,std::bind(&broadcast_status,std::placeholders::_1));
+//			boost::asio::spawn(ioc_r,std::bind(&broadcast_status,std::placeholders::_1));
 			ioc_r.run();
 			m_takers.clear();
 		}));
 
-//		thread_w = std::move(std::thread([]{
-//			boost::asio::spawn(ioc_w,std::bind(&broadcast_status,std::placeholders::_1));
-//			ioc_w.run();
-//		}));
+		thread_w = std::move(std::thread([]{
+			boost::asio::spawn(ioc_w,std::bind(&broadcast_status,std::placeholders::_1));
+			ioc_w.run();
+		}));
 
 		#ifdef _WINDOWS
 		#ifndef USE_SSL
