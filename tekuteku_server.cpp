@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2025-02-04";
+static std::string m_version = "build 2025-03-16";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -701,11 +701,11 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		boost::process::ipstream is;
 		std::error_code ec;
 		boost::process::child c("."+path+http_query.args(),boost::process::std_out>is,ec);
+		c.wait();
 		if (!ec) {
 			bool end_of_header = false;
 			std::string x;
 			while ( is && std::getline(is,x) ) { if (end_of_header) { body += (x+"\n"); } if (x.empty()) { end_of_header = true; } } // getline は改行コードを含まない
-			c.wait();
 			auto const size = body.size();
 			res.set(boost::beast::http::field::content_type,"text/html");
 			res.content_length(size);

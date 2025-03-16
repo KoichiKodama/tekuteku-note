@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-02-14</title>
+<title>てくてくノート ver 2025-03-16</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -59,7 +59,7 @@
 			<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
 			<ul class="dropdown-menu">
 			<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
-			<li class="dropdown-item" data-engine="ami-voice">Ami Voice</li>
+			<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>
 			</ul>
 		</div>
 		<div class="dropdown" id="recognition-lang">
@@ -108,7 +108,7 @@
 			<li class="dropdown-item" data-lang="en">English</li>
 			<li class="dropdown-item" data-lang="zh-CN">Chinese</li>
 			<li class="dropdown-item" data-lang="ko">Korean</li>
-			<li class="dropdown-item" data-lang="th">Thai</li>
+			<li class="dropdown-item" data-lang="id">Indonesian</li>
 			</ul>
 		</div>
 	</div>
@@ -159,7 +159,7 @@
 </div>-->
 	
 <div style="display:none;">
-<input id="ami-voice-authorization" type="text" />
+<input id="amivoice-authorization" type="text" />
 <input type="file" id="recognition-dic-load" />
 </div>
 
@@ -167,7 +167,7 @@
 <script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
 <script src='./tools/sprintf-1.1.2/sprintf.min.js'></script>
 <script type="text/javascript" src="./tools/crypto-js-4.1.1.min.js"></script>
-<script type="text/javascript" src="./tools/ami-voice.js"></script>
+<script type="text/javascript" src="./tools/amivoice.js"></script>
 <script type="text/javascript">
 'use strict';
 
@@ -248,7 +248,7 @@ async function decrypt_token( service_name ) {
 	return {};
 }
 
-function recognizer_ami_voice() {
+function recognizer_amivoice() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var debug = false;
 
@@ -261,10 +261,10 @@ function recognizer_ami_voice() {
 		on_change_state : undefined
 	};
 
-	decrypt_token('ami-voice').then((token)=>{ if ( 'username' in token ) { Wrp.sid = token.username; Wrp.spw = token.password; change_state(0); } });
+	decrypt_token('amivoice').then((token)=>{ if ( 'username' in token ) { Wrp.sid = token.username; Wrp.spw = token.password; change_state(0); } });
 
 	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/";	// ログを残さない場合は /nolog を付加
-	Wrp.authorizationElement = document.getElementById('ami-voice-authorization');
+	Wrp.authorizationElement = document.getElementById('amivoice-authorization');
 	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
 	Wrp.epi = '60000';
@@ -479,8 +479,8 @@ function set_recognition_engine(engine) {
 			$('#recognition-dic').hide();
 			break;
 		}
-		case "ami-voice": {
-			recognizer = recognizer_ami_voice();
+		case "amivoice": {
+			recognizer = recognizer_amivoice();
 			$('#recognition-lang').hide();
 			$('#recognition-dic').show();
 			break;
@@ -846,7 +846,12 @@ $(document).ready( function(){
 	});
 	$('#recognition-control').on('click',function(event){
 		switch ( $('#recognition-control').val() ) {
-			case '0' : { if ( mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); } recognizer.start(); mic_device.start(); break; }
+			case '0' : {
+				if ( mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); }
+				recognizer.start();
+				mic_device.start();
+				break;
+			}
 			case '2' : { recognizer.stop(); mic_device.stop(); break; }
 			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
 		}
@@ -1021,7 +1026,7 @@ $(document).ready( function(){
 
 	fetch_token('./tools/token.json').then((ok)=>{
 		if (ok) {
-			if ( 'ami-voice' in token ) { $('#recognition-engine').show(); }
+			if ( 'amivoice' in token ) { $('#recognition-engine').show(); }
 			if ( 'google-translate' in token ) {
 				translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
 					let api_key = token['google-translate'].key;
