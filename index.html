@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-03-16</title>
+<title>てくてくノート ver 2025-04-02</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -60,6 +60,7 @@
 			<ul class="dropdown-menu">
 			<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
 			<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>
+			<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>
 			</ul>
 		</div>
 		<div class="dropdown" id="recognition-lang">
@@ -246,6 +247,46 @@ async function decrypt_token( service_name ) {
 		}
 	}
 	return {};
+}
+
+function recognizer_yyprobe() {
+	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
+	var debug = false;
+
+	var recognizer_ = {
+		start : start_,
+		stop : stop_,
+		status : status_,
+		set_lang : ()=>{ alert('set_lang is not supported'); },
+		set_dic : ()=>{ alert('set_dic is not supported'); },
+		on_change_state : undefined
+	};
+
+	function change_state(i) {
+		state = i;
+		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
+	};
+
+	function start_(){
+		if ( state != 0 ) return;
+		change_state(1);
+		$.ajax("./tools/yy-exec?start+ws://localhost/+"+token["yyprobe"].key,{ type:'get', dataType:'json' })
+			.done((data)=>{ console.log(data); change_state(2); })
+			.fail((x,status,error)=>{ alert("error:"+status); })
+	};
+
+	function stop_(){
+		if ( state != 2 ) return;
+		change_state(1);
+		$.ajax("./tools/yy-exec?stop",{ type:'get', dataType:'json' })
+			.done((data)=>{ console.log(data); change_state(0); })
+			.fail((x,status,error)=>{ alert("error:"+status); })
+	};
+
+	function status_(){ change_state(state); return state; };
+
+	change_state(0);
+	return recognizer_;
 }
 
 function recognizer_amivoice() {
@@ -483,6 +524,12 @@ function set_recognition_engine(engine) {
 			recognizer = recognizer_amivoice();
 			$('#recognition-lang').hide();
 			$('#recognition-dic').show();
+			break;
+		}
+		case "yyprobe": {
+			recognizer = recognizer_yyprobe();
+			$('#recognition-lang').hide();
+			$('#recognition-dic').hide();
 			break;
 		}
 	}
@@ -845,14 +892,15 @@ $(document).ready( function(){
 		}
 	});
 	$('#recognition-control').on('click',function(event){
+		let x = $('#recognition-engine li').filter('.text-bg-primary').data('engine');
 		switch ( $('#recognition-control').val() ) {
 			case '0' : {
-				if ( mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); }
+				if ( x != "yyprobe" && mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); }
 				recognizer.start();
-				mic_device.start();
+				if ( x != "yyprobe" ) { mic_device.start(); }
 				break;
 			}
-			case '2' : { recognizer.stop(); mic_device.stop(); break; }
+			case '2' : { recognizer.stop(); if ( x != "yyprobe" ) { mic_device.stop(); } break; }
 			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
 		}
 	});
@@ -1026,19 +1074,17 @@ $(document).ready( function(){
 
 	fetch_token('./tools/token.json').then((ok)=>{
 		if (ok) {
-			if ( 'amivoice' in token ) { $('#recognition-engine').show(); }
+			if ( 'amivoice' in token || 'yyprobe' in token ) { $('#recognition-engine').show(); }
 			if ( 'google-translate' in token ) {
 				translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
 					let api_key = token['google-translate'].key;
 					if ( translate_lang_to == 'none' ) { return c.text; }
 					if (!( translate_lang_to in c )) {
-						$.ajax({
-							method: 'POST',
-							async: false, 
-							url: "https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
-							success: function(result,status_code,xhr) { c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); },
-							error: function(xhr,error_msg,error_thrown) { console.log(error_thrown); }
-						});
+						$.ajax(
+							"https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
+							{type:'post',dataType:'json',async:false})
+							.done((result)=>{ c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); })
+							.fail(()=>{ alert("error in google-translate"); });
 					}
 					return c[translate_lang_to];
 				};

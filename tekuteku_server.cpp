@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2025-03-16";
+static std::string m_version = "build 2025-04-02";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -336,6 +336,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 				}
 				whiteboard_updated = false; debug_whiteboard_update++;
 			}
+			else j_whiteboard.clear();
 
 			for (auto& e : m_takers) {
 				const taker_info_t& t = e.second;
@@ -696,7 +697,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	res.set(boost::beast::http::field::server,m_server_name);
 	res.keep_alive(req.keep_alive());
 
-	if ( path_ex == "py" ) {
+	if ( path_ex == "py" || path_ex == "" ) {
 		boost::beast::http::string_body::value_type body;
 		boost::process::ipstream is;
 		std::error_code ec;
@@ -705,9 +706,13 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		if (!ec) {
 			bool end_of_header = false;
 			std::string x;
-			while ( is && std::getline(is,x) ) { if (end_of_header) { body += (x+"\n"); } if (x.empty()) { end_of_header = true; } } // getline は改行コードを含まない
+			while ( is && std::getline(is,x) ) {
+				if ( x.back() == '\r' ) x.pop_back(); // getline は改行コードを含まない。windows での \r 削除。
+				if (end_of_header) body += (x+"\n");
+				if (x.empty()) end_of_header = true;
+			}
 			auto const size = body.size();
-			res.set(boost::beast::http::field::content_type,"text/html");
+			res.set(boost::beast::http::field::content_type,"text/plain");
 			res.content_length(size);
 			if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
 			boost::beast::http::response<boost::beast::http::string_body> res_x{res};
