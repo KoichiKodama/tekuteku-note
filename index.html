@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-04-02</title>
+<title>てくてくノート ver 2025-04-10</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku-icon.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -47,7 +47,7 @@
 	</div>-->
 	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
 	<div id="pi-control" class="m-2 pt-auto">
-		<a class="btn btn-outline-info" href="./pi-status.py" target="_blank">ラズパイ確認</a>
+		<a class="btn btn-outline-info" href="./pi.html" target="_blank">ラズパイ確認</a>
 	</div>
 </div>
 </div>
@@ -59,8 +59,6 @@
 			<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ブラウザ標準</button>
 			<ul class="dropdown-menu">
 			<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>
-			<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>
-			<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>
 			</ul>
 		</div>
 		<div class="dropdown" id="recognition-lang">
@@ -252,6 +250,7 @@ async function decrypt_token( service_name ) {
 function recognizer_yyprobe() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var debug = false;
+	var yy_socket = null;
 
 	var recognizer_ = {
 		start : start_,
@@ -269,21 +268,25 @@ function recognizer_yyprobe() {
 
 	function start_(){
 		if ( state != 0 ) return;
-		change_state(1);
-		$.ajax("./tools/yy-exec?start+ws://localhost/+"+token["yyprobe"].key,{ type:'get', dataType:'json' })
-			.done((data)=>{ console.log(data); change_state(2); })
-			.fail((x,status,error)=>{ alert("error:"+status); })
+		let api_key = token["yyprobe"].key;
+		yy_socket = new WebSocket('ws://localhost:8080');
+		yy_socket.onopen = function(event){
+			change_state(1);
+			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
+		}
+		yy_socket.onclose = function(event){ change_state(0); };
+		yy_socket.onerror = function(event){ change_state(9); };
+		yy_socket.onmessage = function(event){
+			var rc = JSON.parse(event.data);
+			switch (state) {
+				case 1: if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); } break;
+				case 2: if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); } break;
+			}
+		};
 	};
 
-	function stop_(){
-		if ( state != 2 ) return;
-		change_state(1);
-		$.ajax("./tools/yy-exec?stop",{ type:'get', dataType:'json' })
-			.done((data)=>{ console.log(data); change_state(0); })
-			.fail((x,status,error)=>{ alert("error:"+status); })
-	};
-
-	function status_(){ change_state(state); return state; };
+	function stop_() { if ( state == 2 ) { change_state(1); yy_socket.send('{"job":"stop"}'); } };
+	function status_() { change_state(state); return state; };
 
 	change_state(0);
 	return recognizer_;
@@ -1074,7 +1077,10 @@ $(document).ready( function(){
 
 	fetch_token('./tools/token.json').then((ok)=>{
 		if (ok) {
-			if ( 'amivoice' in token || 'yyprobe' in token ) { $('#recognition-engine').show(); }
+			let n = 0;
+			if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
+			if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
+			if ( n != 0 ) $('#recognition-engine').show();
 			if ( 'google-translate' in token ) {
 				translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
 					let api_key = token['google-translate'].key;

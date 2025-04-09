@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2025-04-02";
+static std::string m_version = "build 2025-04-10";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -587,52 +587,29 @@ public:
 	http_query_t( std::string s ) { parse(s); };
 	~http_query_t() {};
 	void parse( std::string s ) {
-		m_mode = ( s.find("=") == std::string::npos ? 0:1 );
-		m_args.clear();
 		m_envs.clear();
-		std::string::size_type ii,jj;
-		switch (m_mode) {
-		case 0:
-			ii = 0;
-			jj = s.find_first_of("+"); if ( jj == std::string::npos ) jj = s.size();
-			while ( ii < s.size() ) {
-				std::string a = s.substr(ii,jj-ii);
-				m_args.push_back(a);
-				ii = jj+1;
-				jj = s.find_first_of("+",ii);
-				if ( jj == std::string::npos ) jj = s.size();
-			}
-			break;
-		case 1:
-			ii = 0;
-			jj = s.find_first_of("&"); if ( jj == std::string::npos ) jj = s.size();
-			while ( ii < s.size() ) {
-				std::string a = s.substr(ii,jj-ii);
-				std::string::size_type i = a.find("=");
-				m_envs[a.substr(0,i)] = ( i == std::string::npos ? "" : a.substr(i+1) );
-				ii = jj+1;
-				jj = s.find_first_of("&",ii);
-				if ( jj == std::string::npos ) jj = s.size();
-			}
-			break;
+		std::string::size_type ii = 0;
+		std::string::size_type jj = s.find_first_of("&"); if ( jj == std::string::npos ) jj = s.size();
+		while ( ii < s.size() ) {
+			std::string a = s.substr(ii,jj-ii);
+			std::string::size_type i = a.find("=");
+			m_envs[a.substr(0,i)] = ( i == std::string::npos ? "" : a.substr(i+1) );
+			ii = jj+1;
+			jj = s.find_first_of("&",ii);
+			if ( jj == std::string::npos ) jj = s.size();
 		}
 	};
-	int mode() const { return m_mode; };
 	std::string args() const {
-		if ( m_mode != 0 ) return "";
 		std::string r;
-		std::for_each(m_args.begin(),m_args.end(),[&r]( const auto& c ){ r += (" "+c); });
+		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r += (" "+c.first+"="+c.second); });
 		return r;
 	};
 	std::string env( const std::string& key ) const {
-		if ( m_mode != 1 ) return "";
 		auto ii = m_envs.find(key);
 		return ( ii == m_envs.end() ? "" : (*ii).second );
 	};
 
 private:
-	int m_mode;	// 0:args 1:envs
-	std::vector<std::string> m_args;
 	std::map<std::string,std::string> m_envs;
 };
 
@@ -697,11 +674,15 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	res.set(boost::beast::http::field::server,m_server_name);
 	res.keep_alive(req.keep_alive());
 
-	if ( path_ex == "py" || path_ex == "" ) {
+	if ( path_ex == "py" || path_ex == "sh" ) {
 		boost::beast::http::string_body::value_type body;
 		boost::process::ipstream is;
 		std::error_code ec;
+		#ifdef _WINDOWS
+		boost::process::child c("bash -c '."+path+http_query.args()+"'",boost::process::std_out>is,ec);
+		#else
 		boost::process::child c("."+path+http_query.args(),boost::process::std_out>is,ec);
+		#endif
 		c.wait();
 		if (!ec) {
 			bool end_of_header = false;
@@ -712,6 +693,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 				if (x.empty()) end_of_header = true;
 			}
 			auto const size = body.size();
+		boost::process::child c("."+path+http_query.args(),boost::process::std_out>is,ec);
 			res.set(boost::beast::http::field::content_type,"text/plain");
 			res.content_length(size);
 			if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
@@ -879,7 +861,7 @@ int main( int argc, char** argv ) {
 		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
 		std::string tray_name = (boost::format("tekuteku-%04d") % m_port).str().c_str();
-		if ( tray_exist(tray_name.c_str()) == true ) {
+		if ( tray_exist(tray_name.c_str()) == 1 ) {
 			log("stop due to multiple servers\n");
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
 			return 0;
@@ -936,12 +918,13 @@ int main( int argc, char** argv ) {
 				wd.start();
 			}
 		}));
-		if ( tray_init(tray_t("tekuteku-icon.png",terminate_server),(boost::format("tekuteku-%04d") % m_port).str().c_str()) != 0 ) {
+		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku-icon.ico") != 0 ) {
 			log("failed to start tray\n");
 			terminate_server();
 			return 0;
 		}
 		while ( tray_loop(1) == 0 ) {}
+		terminate_server();
 		#else
 		int signum;
 		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");
