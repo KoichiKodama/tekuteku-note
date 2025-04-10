@@ -1,11 +1,13 @@
-﻿#include <windows.h>
+﻿static int tray_exist( const char* tray_name );
+static int tray_init( const char* tray_name, const char* icon_file_name );
+static int tray_loop( int blocking );
+
+#if defined(_WIN64)||defined(_WIN32)
+
+#include <windows.h>
 #include <shellapi.h>
 #pragma comment(lib,"user32.lib")
 #pragma comment(lib,"shell32.lib")
-
-static int tray_exist( const char* tray_name );
-static int tray_init( const char* tray_name, const char* icon_file_name );
-static int tray_loop( int blocking );
 
 #define WM_TRAY_CALLBACK_MESSAGE (WM_USER+1)
 #define WC_TRAY_CLASS_NAME "TRAY"
@@ -107,3 +109,24 @@ static int tray_loop( int blocking ) {
 	DispatchMessage(&msg);
 	return 0;
 }
+
+#else
+
+#include <signal.h>
+
+static sigset_t ss;
+static int tray_exist( const char* tray_name ) { return 0; }
+static int tray_init( const char* tray_name, const char* icon_file_name ) {
+	sigemptyset(&ss);
+	sigaddset(&ss,SIGTERM);
+	return ( pthread_sigmask(SIG_BLOCK,&ss,nullptr) == 0 ? 0 : -1 );
+}
+static int tray_loop( int blocking ) {
+	siginfo_t si;
+	struct timespec ts;
+	ts.tv_sec = 0;
+	ts.tv_nsec = ( blocking == 0 ? 0 : 500000000 );
+	return ( sigtimedwait(&ss,&si,&ts) > 0 ? -1 : 0 );
+}
+
+#endif

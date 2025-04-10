@@ -248,9 +248,40 @@ async function decrypt_token( service_name ) {
 }
 
 function recognizer_yyprobe() {
+	var api_key = token["yyprobe"].key;
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var debug = false;
-	var yy_socket = null;
+	var yy_socket = new WebSocket('ws://localhost:8080');
+	yy_socket.onopen = function(event){};
+	yy_socket.onclose = function(event){ change_state(0); };
+	yy_socket.onerror = function(event){ change_state(9); };
+	yy_socket.onmessage = function(event){};
+
+	function change_state(i) {
+		state = i;
+		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
+	}
+
+	function start_() {
+		if ( state != 0 ) return;
+		yy_socket.onmessage = function(event) {
+			let rc = JSON.parse(event.data);
+			if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); }
+		};
+		change_state(1);
+		yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
+	};
+
+	function stop_() {
+		if ( state != 2 ) return;
+		yy_socket.onmessage = function(event) {
+			let rc = JSON.parse(event.data);
+			if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); }
+		};
+		change_state(1);
+		yy_socket.send('{"job":"stop"}');
+	};
+
+	function status_() { change_state(state); return state; };
 
 	var recognizer_ = {
 		start : start_,
@@ -260,33 +291,6 @@ function recognizer_yyprobe() {
 		set_dic : ()=>{ alert('set_dic is not supported'); },
 		on_change_state : undefined
 	};
-
-	function change_state(i) {
-		state = i;
-		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
-	};
-
-	function start_(){
-		if ( state != 0 ) return;
-		let api_key = token["yyprobe"].key;
-		yy_socket = new WebSocket('ws://localhost:8080');
-		yy_socket.onopen = function(event){
-			change_state(1);
-			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
-		}
-		yy_socket.onclose = function(event){ change_state(0); };
-		yy_socket.onerror = function(event){ change_state(9); };
-		yy_socket.onmessage = function(event){
-			var rc = JSON.parse(event.data);
-			switch (state) {
-				case 1: if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); } break;
-				case 2: if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); } break;
-			}
-		};
-	};
-
-	function stop_() { if ( state == 2 ) { change_state(1); yy_socket.send('{"job":"stop"}'); } };
-	function status_() { change_state(state); return state; };
 
 	change_state(0);
 	return recognizer_;

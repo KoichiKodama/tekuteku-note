@@ -8,7 +8,7 @@
 	#include <iphlpapi.h>
 #else
 	#include <unistd.h>
-	#include <signal.h>
+//	#include <signal.h>
 	#include <sys/types.h>
 	#include <ifaddrs.h>
 #endif
@@ -42,9 +42,9 @@
 
 #include <json.hpp>
 #include <k_time.hpp>
+#include <tray.hpp>
 
 #ifdef _WINDOWS
-	#include <tray.hpp>
 	#pragma comment(lib,"user32.lib")
 	#pragma comment(lib,"shell32.lib")
 	#pragma comment(lib,"ws2_32.lib")
@@ -61,6 +61,7 @@ static std::string m_version = "build 2025-04-10";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
+static std::string m_yy = "";
 static std::mutex m_mutex_log;
 static int session_timeout = 21600;
 static int debug_async_accept = 0;
@@ -778,9 +779,6 @@ network_watchdog wd; static std::thread thread_wd{};
 
 void terminate_server() {
 	request_broadcast.stop();
-	#ifdef _WINDOWS
-	wd.stop(); thread_wd.join();
-	#endif
 //	ioc_w.stop(); thread_w.join();
 	ioc_r.stop(); thread_r.join();
 	if (true) log_whiteboard();
@@ -854,6 +852,9 @@ int main( int argc, char** argv ) {
 			else if ( strcmp(*argv,"--magic") == 0 ) {
 				argc--; argv++; m_magic = *argv;
 			}
+			else if ( strcmp(*argv,"--yy") == 0 ) {
+				argc--; argv++; m_yy = *argv;
+			}
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
 			argc--; argv++;
 		}
@@ -866,6 +867,7 @@ int main( int argc, char** argv ) {
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
 			return 0;
 		}
+		if ( m_yy.empty() == false ) boost::process::spawn(m_yy);
 		#endif
 
 		m_whiteboard.reserve(4096);
@@ -874,12 +876,12 @@ int main( int argc, char** argv ) {
 		if ( m_servers.empty() ) log("no network\n");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
 
-		#ifndef _WINDOWS
-		sigset_t sigset;
-		sigemptyset(&sigset);
-		sigaddset(&sigset,SIGTERM);
-		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n"); // thread 生成前に signal mask を行う。
-		#endif
+//		#ifndef _WINDOWS
+//		sigset_t sigset;
+//		sigemptyset(&sigset);
+//		sigaddset(&sigset,SIGTERM);
+//		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n"); // thread 生成前に signal mask を行う。
+//		#endif
 
 		thread_r = std::move(std::thread([]{
 			auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
@@ -918,19 +920,18 @@ int main( int argc, char** argv ) {
 				wd.start();
 			}
 		}));
-		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku-icon.ico") != 0 ) {
-			log("failed to start tray\n");
-			terminate_server();
-			return 0;
-		}
-		while ( tray_loop(1) == 0 ) {}
-		terminate_server();
-		#else
-		int signum;
-		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");
-		terminate_server();
 		#endif
+		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku-icon.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
+//		#else
+//		int signum;
+//		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");
+//		#endif
 
+		#ifdef _WINDOWS
+		wd.stop(); thread_wd.join();
+		if ( m_yy.empty() == false ) SendMessage(FindWindow("TRAY","yy-service"),WM_CLOSE,0,0);
+		#endif
+		terminate_server();
 		return 0;
 	}
 	catch ( boost::system::system_error& e ) { log((boost::format("boost exception : %s\n") % e.what()).str()); }
