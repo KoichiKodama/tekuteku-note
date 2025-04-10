@@ -8,7 +8,6 @@
 	#include <iphlpapi.h>
 #else
 	#include <unistd.h>
-//	#include <signal.h>
 	#include <sys/types.h>
 	#include <ifaddrs.h>
 #endif
@@ -57,7 +56,7 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
-static std::string m_version = "build 2025-04-10";
+static std::string m_version = "build 2025-04-11";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -830,6 +829,23 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 
 int main( int argc, char** argv ) {
 	try {
+		std::ifstream f("config.json");
+		if ( f.is_open() ) {
+			nlohmann::json cfg = nlohmann::json::parse(f);
+			if ( cfg.contains("port") ) {
+				m_port = cfg["port"];
+				m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
+			}
+			#ifdef USE_SSL
+			if ( cfg.contains("ssl") {
+				nlohmann::json ssl = cfg["ssl"];
+				load_server_certificate(ctx,ssl["key"],ssl["cer"],ssl["cer_chain"],ssl["pwd"]);
+			}
+			#endif
+			if ( cfg.contains("magic") ) m_magic = cfg["magic"];
+			if ( cfg.contains("yy") ) m_yy = cfg["yy"];
+		}
+
 		truncate_log();
 		argc--; argv++;
 		while ( argc != 0 ) {
@@ -837,7 +853,6 @@ int main( int argc, char** argv ) {
 				argc--; argv++;
 				m_port = atoi(*argv);
 				m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
-				log(( boost::format("option port=%d\n") % m_port ).str());
 			}
 			#ifdef USE_SSL
 			else if ( strcmp(*argv,"--ssl") == 0 ) {
@@ -858,6 +873,7 @@ int main( int argc, char** argv ) {
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
 			argc--; argv++;
 		}
+		log(( boost::format("option port=%d\n") % m_port ).str());
 
 		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
@@ -875,13 +891,6 @@ int main( int argc, char** argv ) {
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) log("no network\n");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
-
-//		#ifndef _WINDOWS
-//		sigset_t sigset;
-//		sigemptyset(&sigset);
-//		sigaddset(&sigset,SIGTERM);
-//		if ( pthread_sigmask(SIG_BLOCK,&sigset,nullptr) != 0 ) log("error in pthread_sigmask\n"); // thread 生成前に signal mask を行う。
-//		#endif
 
 		thread_r = std::move(std::thread([]{
 			auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
@@ -922,10 +931,6 @@ int main( int argc, char** argv ) {
 		}));
 		#endif
 		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku-icon.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
-//		#else
-//		int signum;
-//		if ( sigwait(&sigset,&signum) == 0 ) log((boost::format("sigwait %d\n")%signum).str()); else log("error in sigwait\n");
-//		#endif
 
 		#ifdef _WINDOWS
 		wd.stop(); thread_wd.join();
