@@ -1,3 +1,3 @@
 @echo off
 if exist てくてくノート.zip del てくてくノート.zip
-7z a てくてくノート.zip tools index.html tekuteku-icon.ico てくてくノートサーバ.exe -x!tools\token.json 1>NUL
+call 7z a -x!tools\token.json てくてくノート.zip index.html tekuteku.ico てくてくノートサーバ.exe tools 1>NUL

@@ -56,11 +56,11 @@ static int DEFAULT_PORT = 80;
 static int DEFAULT_PORT = 443;
 #endif
 
+static nlohmann::json m_cfg;
 static std::string m_version = "build 2025-04-11";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
-static std::string m_yy = "";
 static std::mutex m_mutex_log;
 static int session_timeout = 21600;
 static int debug_async_accept = 0;
@@ -207,6 +207,7 @@ struct whiteboard_element_t {
 	int edit;
 	bool tobe_sent;
 };
+
 std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> m_takers;
 std::vector<whiteboard_element_t> m_whiteboard;
 boost::asio::ip::port_type m_port = DEFAULT_PORT;
@@ -829,51 +830,40 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 
 int main( int argc, char** argv ) {
 	try {
-		std::ifstream f("config.json");
-		if ( f.is_open() ) {
-			nlohmann::json cfg = nlohmann::json::parse(f);
-			if ( cfg.contains("port") ) {
-				m_port = cfg["port"];
-				m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
-			}
-			#ifdef USE_SSL
-			if ( cfg.contains("ssl") {
-				nlohmann::json ssl = cfg["ssl"];
-				load_server_certificate(ctx,ssl["key"],ssl["cer"],ssl["cer_chain"],ssl["pwd"]);
-			}
-			#endif
-			if ( cfg.contains("magic") ) m_magic = cfg["magic"];
-			if ( cfg.contains("yy") ) m_yy = cfg["yy"];
+		{
+			std::ifstream f("config.json");
+			if ( f.is_open() ) m_cfg = nlohmann::json::parse(f);
 		}
-
-		truncate_log();
 		argc--; argv++;
 		while ( argc != 0 ) {
-			if ( strcmp(*argv,"--port") == 0 ) {
-				argc--; argv++;
-				m_port = atoi(*argv);
-				m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
-			}
-			#ifdef USE_SSL
-			else if ( strcmp(*argv,"--ssl") == 0 ) {
+			if ( strcmp(*argv,"--ssl") == 0 ) {
 				std::string ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd;
-				argc--; argv++; ssl_key = *argv;
-				argc--; argv++; ssl_cer = *argv;
-				argc--; argv++; ssl_cer_chain = *argv;
-				argc--; argv++; ssl_pwd = *argv;
-				load_server_certificate(ctx,ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd);
+				argc--; argv++; m_cfg["ssl-key"] = *argv;
+				argc--; argv++; m_cfg["ssl-cer"] = *argv;
+				argc--; argv++; m_cfg["ssl-chain"] = *argv;
+				argc--; argv++; m_cfg["ssl-pwd"] = *argv;
 			}
-			#endif
-			else if ( strcmp(*argv,"--magic") == 0 ) {
-				argc--; argv++; m_magic = *argv;
-			}
-			else if ( strcmp(*argv,"--yy") == 0 ) {
-				argc--; argv++; m_yy = *argv;
-			}
+			else if ( strcmp(*argv,"--port") == 0 ) { argc--; argv++; m_cfg["port"] = atoi(*argv); }
+			else if ( strcmp(*argv,"--magic") == 0 ) { argc--; argv++; m_cfg["magic"] = *argv; }
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
 			argc--; argv++;
 		}
+
+		if ( m_cfg.contains("port") ) {
+			m_port = m_cfg["port"].get<int>();
+			m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
+		}
+		if ( m_cfg.contains("magic") ) m_magic = m_cfg["magic"].get<std::string>();
+
+		truncate_log();
 		log(( boost::format("option port=%d\n") % m_port ).str());
+		#ifdef USE_SSL
+		std::string key = m_cfg["ssl-key"].get<std::string>();
+		std::string cer = m_cfg["ssl-cer"].get<std::string>();
+		std::string chain = m_cfg["ssl-chain"].get<std::string>();
+		std::string pwd = m_cfg["ssl-pwd"].get<std::string>();
+		load_server_certificate(ctx,key,cer,chain,pwd);
+		#endif
 
 		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
@@ -883,7 +873,7 @@ int main( int argc, char** argv ) {
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
 			return 0;
 		}
-		if ( m_yy.empty() == false ) boost::process::spawn(m_yy);
+		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) boost::process::spawn(a.get<std::string>()); }
 		#endif
 
 		m_whiteboard.reserve(4096);
@@ -930,11 +920,11 @@ int main( int argc, char** argv ) {
 			}
 		}));
 		#endif
-		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku-icon.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
+		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
 
 		#ifdef _WINDOWS
 		wd.stop(); thread_wd.join();
-		if ( m_yy.empty() == false ) SendMessage(FindWindow("TRAY","yy-service"),WM_CLOSE,0,0);
+		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
 		#endif
 		terminate_server();
 		return 0;

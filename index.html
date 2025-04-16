@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-04-10</title>
+<title>てくてくノート ver 2025-04-15</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
-<link rel='icon' href='./tekuteku-icon.ico'>
+<link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
 <style>.teku { background-size: auto; background-repeat: no-repeat; }</style>
 </head>
@@ -247,14 +247,60 @@ async function decrypt_token( service_name ) {
 	return {};
 }
 
+function recognizer_vosk() {
+	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
+	var vosk_socket = null;
+	
+	function change_state(i) {
+		state = i;
+		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
+	}
+
+	function start_() {
+		if ( state != 0 ) return;
+		vosk_socket = new WebSocket(token["vosk"].server);
+		vosk_socket.onopen = function(event){
+			change_state(1);
+			vosk_socket.send(`{"job":"start","tekuteku_url":"ws://localhost"}`);
+		};
+		vosk_socket.onclose = function(event){ change_state(0); };
+		vosk_socket.onerror = function(event){ change_state(9); };
+		vosk_socket.onmessage = function(event) {
+			let rc = JSON.parse(event.data);
+			if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); }
+		};
+	};
+
+	function stop_() {
+		if ( state != 2 ) return;
+		vosk_socket.onmessage = function(event) {
+			let rc = JSON.parse(event.data);
+			if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); }
+			vosk_socket.close();
+		};
+		change_state(1);
+		vosk_socket.send('{"job":"stop"}');
+	};
+
+	function status_() { change_state(state); return state; };
+
+	var recognizer_ = {
+		use_microphone : false, 
+		start : start_,
+		stop : stop_,
+		status : status_,
+		set_lang : ()=>{ alert('set_lang is not supported'); },
+		set_dic : ()=>{ alert('set_dic is not supported'); },
+		on_change_state : undefined
+	};
+	change_state(0);
+	return recognizer_;
+}
+
 function recognizer_yyprobe() {
 	var api_key = token["yyprobe"].key;
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var yy_socket = new WebSocket('ws://localhost:8080');
-	yy_socket.onopen = function(event){};
-	yy_socket.onclose = function(event){ change_state(0); };
-	yy_socket.onerror = function(event){ change_state(9); };
-	yy_socket.onmessage = function(event){};
+	var yy_socket = null;
 
 	function change_state(i) {
 		state = i;
@@ -263,12 +309,17 @@ function recognizer_yyprobe() {
 
 	function start_() {
 		if ( state != 0 ) return;
+		change_state(1);
+		yy_socket = new WebSocket(token["yyprobe"].server);
+		yy_socket.onopen = function(event){
+			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
+		};
+		yy_socket.onclose = function(event){ change_state(0); };
+		yy_socket.onerror = function(event){ change_state(9); };
 		yy_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
 			if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); }
 		};
-		change_state(1);
-		yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
 	};
 
 	function stop_() {
@@ -276,6 +327,7 @@ function recognizer_yyprobe() {
 		yy_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
 			if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); }
+			yy_socket.close();
 		};
 		change_state(1);
 		yy_socket.send('{"job":"stop"}');
@@ -284,6 +336,7 @@ function recognizer_yyprobe() {
 	function status_() { change_state(state); return state; };
 
 	var recognizer_ = {
+		use_microphone : false, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -291,7 +344,6 @@ function recognizer_yyprobe() {
 		set_dic : ()=>{ alert('set_dic is not supported'); },
 		on_change_state : undefined
 	};
-
 	change_state(0);
 	return recognizer_;
 }
@@ -301,6 +353,7 @@ function recognizer_amivoice() {
 	var debug = false;
 
 	var recognizer_ = {
+		use_microphone : true, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -429,6 +482,7 @@ function recognizer_default() {
 	}
 
 	var recognizer_ = {
+		use_microphone : true, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -520,25 +574,21 @@ class mic_device_t {
 
 function set_recognition_engine(engine) {
 	if (recognizer) { recognizer.stop(); recognizer = null; }
+	$('#recognition-lang').hide();
+	$('#recognition-dic').hide();
 	switch (engine) {
 		case "default": {
 			recognizer = recognizer_default();
 			$('#recognition-lang').show().trigger('hide.bs.dropdown');
-			$('#recognition-dic').hide();
 			break;
 		}
 		case "amivoice": {
 			recognizer = recognizer_amivoice();
-			$('#recognition-lang').hide();
 			$('#recognition-dic').show();
 			break;
 		}
-		case "yyprobe": {
-			recognizer = recognizer_yyprobe();
-			$('#recognition-lang').hide();
-			$('#recognition-dic').hide();
-			break;
-		}
+		case "yyprobe": { recognizer = recognizer_yyprobe(); break; }
+		case "vosk": { recognizer = recognizer_vosk(); break; }
 	}
 	recognizer.on_change_state = recognition_control_update;
 	recognizer.status();
@@ -902,12 +952,12 @@ $(document).ready( function(){
 		let x = $('#recognition-engine li').filter('.text-bg-primary').data('engine');
 		switch ( $('#recognition-control').val() ) {
 			case '0' : {
-				if ( x != "yyprobe" && mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); }
+				if ( recognizer.use_microphone && mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); }
 				recognizer.start();
-				if ( x != "yyprobe" ) { mic_device.start(); }
+				if ( recognizer.use_microphone ) { mic_device.start(); }
 				break;
 			}
-			case '2' : { recognizer.stop(); if ( x != "yyprobe" ) { mic_device.stop(); } break; }
+			case '2' : { recognizer.stop(); if ( recognizer.use_microphone ) { mic_device.stop(); } break; }
 			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
 		}
 	});
@@ -1084,6 +1134,7 @@ $(document).ready( function(){
 			let n = 0;
 			if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
 			if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
+			if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); n++; }
 			if ( n != 0 ) $('#recognition-engine').show();
 			if ( 'google-translate' in token ) {
 				translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
