@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-04-15</title>
+<title>てくてくノート ver 2025-04-22</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -111,10 +111,13 @@
 			</ul>
 		</div>
 	</div>
+	<div class="btn-group m-2">
+		<input type="text" id="taker-name" class="form-control px-1 text-center" placeholder="名札" maxlength="5" size="7" value=""/>
+	</div>
 	<div class="btn-group m-2 taker-extra">
 		<input class="btn-check btn-outline-secondary" type="checkbox" id="speech" /><label class="btn btn-outline-secondary text-nowrap" for="speech">しゃべる</label>
 	</div>
-	</div>
+</div>
 </div>
 </div>
 
@@ -130,7 +133,7 @@
 </div>
 </div>
 
-<div class="modal fade" id="token" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<!--<div class="modal fade" id="token" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
 <div class="modal-dialog">
 <div class="modal-content">
 	<div class="modal-body">
@@ -140,7 +143,7 @@
 	<div class="modal-footer"><button type="button" class="btn btn-primary" id="token-ok">OK</button></div>
 </div>
 </div>
-</div>
+</div>-->
 	
 <!--<div class="modal fade" id="share-app-dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
 <div class="modal-dialog">
@@ -165,11 +168,13 @@
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
 <script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
 <script src='./tools/sprintf-1.1.2/sprintf.min.js'></script>
-<script type="text/javascript" src="./tools/crypto-js-4.1.1.min.js"></script>
+<!--<script type="text/javascript" src="./tools/crypto-js-4.1.1.min.js"></script>-->
 <script type="text/javascript" src="./tools/amivoice.js"></script>
+<script type="text/javascript" src="./tools/mic.js"></script>
 <script type="text/javascript">
 'use strict';
 
+var taker_name = "";
 var screen_mode = 0; // 0:標準, 1:見るだけ, 2:字幕表示
 var translate_lang_to = 'none';
 var auto_scroll_whiteboard = true;
@@ -194,7 +199,6 @@ var minimum_container_height = 0;
 var recognizer = null;
 var recognition_local = false;
 var recognized_text_list = [];
-var mic_device = null;
 
 class recognized_text {
 	text = "";
@@ -209,7 +213,8 @@ class recognized_text {
 	}
 }
 
-function sanitize(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&apos;').replace(/"/g,'&quot;'); }
+function html_encode(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,"&apos;").replace(/\n/g,"<br>"); }
+function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot/g,'"').replace(/&apos;/g,"'").replace(/<br>/g,"\n"); }
 
 var token = {};	// トークン一覧(AmiVoice,GoogleTranslate)
 
@@ -223,6 +228,7 @@ async function fetch_token( token_name ) {
 	catch (error) { alert('音声認識初期化エラー : '+error); return false; }
 }
 
+/*
 async function decrypt_token( service_name ) {
 	if ( service_name in token ) {
 		let key = "";
@@ -246,10 +252,13 @@ async function decrypt_token( service_name ) {
 	}
 	return {};
 }
+*/
 
 function recognizer_vosk() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var vosk_socket = null;
+	var mic = new mic_monitor_t('#recognition-control');
+	var mic_stream;
 	
 	function change_state(i) {
 		state = i;
@@ -261,31 +270,30 @@ function recognizer_vosk() {
 		vosk_socket = new WebSocket(token["vosk"].server);
 		vosk_socket.onopen = function(event){
 			change_state(1);
-			vosk_socket.send(`{"job":"start","tekuteku_url":"ws://localhost"}`);
+			vosk_socket.send(`{"job":"start","tekuteku_url":"ws://localhost","vosk_model":"model-ja-small"}`);
+			mic_stream = new mic_stream_t(vosk_socket);
+			mic_stream.start();
+			mic.start();
 		};
 		vosk_socket.onclose = function(event){ change_state(0); };
-		vosk_socket.onerror = function(event){ change_state(9); };
+		vosk_socket.onerror = function(event){ mic.stop(); mic_stream.stop(); change_state(9); };
 		vosk_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
-			if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); }
+			if ( rc.code == "ok" ) { change_state(2); } else { mic.stop(); mic_stream.stop(); change_state(9); }
 		};
 	};
 
 	function stop_() {
 		if ( state != 2 ) return;
-		vosk_socket.onmessage = function(event) {
-			let rc = JSON.parse(event.data);
-			if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); }
-			vosk_socket.close();
-		};
+		mic.stop();
+		mic_stream.stop();
+		vosk_socket.close();
 		change_state(1);
-		vosk_socket.send('{"job":"stop"}');
 	};
 
 	function status_() { change_state(state); return state; };
 
 	var recognizer_ = {
-		use_microphone : false, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -301,6 +309,8 @@ function recognizer_yyprobe() {
 	var api_key = token["yyprobe"].key;
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var yy_socket = null;
+	var mic = new mic_monitor_t('#recognition-control');
+	var mic_stream;
 
 	function change_state(i) {
 		state = i;
@@ -313,30 +323,29 @@ function recognizer_yyprobe() {
 		yy_socket = new WebSocket(token["yyprobe"].server);
 		yy_socket.onopen = function(event){
 			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
+			mic_stream = new mic_stream_t(yy_socket);
+			mic_stream.start();
+			mic.start();
 		};
 		yy_socket.onclose = function(event){ change_state(0); };
-		yy_socket.onerror = function(event){ change_state(9); };
+		yy_socket.onerror = function(event){ mic.stop(); mic_stream.stop(); change_state(9); };
 		yy_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
-			if ( rc.code == "ok" ) { change_state(2); } else { change_state(9); }
+			if ( rc.code == "ok" ) { change_state(2); } else { mic.stop(); mic_stream.stop(); change_state(9); }
 		};
 	};
 
 	function stop_() {
 		if ( state != 2 ) return;
-		yy_socket.onmessage = function(event) {
-			let rc = JSON.parse(event.data);
-			if ( rc.code == "ok" ) { change_state(0); } else { change_state(9); }
-			yy_socket.close();
-		};
+		mic.stop();
+		mic_stream.stop();
+		yy_socket.close();
 		change_state(1);
-		yy_socket.send('{"job":"stop"}');
 	};
 
 	function status_() { change_state(state); return state; };
 
 	var recognizer_ = {
-		use_microphone : false, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -353,7 +362,6 @@ function recognizer_amivoice() {
 	var debug = false;
 
 	var recognizer_ = {
-		use_microphone : true, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -361,18 +369,22 @@ function recognizer_amivoice() {
 		set_dic : set_dic_,
 		on_change_state : undefined
 	};
+	var mic = new mic_monitor_t('#recognition-control');
 
-	decrypt_token('amivoice').then((token)=>{ if ( 'username' in token ) { Wrp.sid = token.username; Wrp.spw = token.password; change_state(0); } });
+//	decrypt_token('amivoice').then((token)=>{ if ( 'username' in token ) { Wrp.sid = token.username; Wrp.spw = token.password; change_state(0); } });
+	Wrp.sid = token["amivoice"].username;
+	Wrp.spw = token["amivoice"].password;
 
-	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/";	// ログを残さない場合は /nolog を付加
+	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/nolog/";	// ログを残さない場合は /nolog を付加
 	Wrp.authorizationElement = document.getElementById('amivoice-authorization');
 	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
 	Wrp.epi = '60000';
+	Wrp.grammarFileNames = '-a2-multi-general';
 	Recorder.maxRecordingTime = 0;
 
 	function update_result(result,is_final) {
-		let text = sanitize(Result.parse(result).text);
+		let text = html_encode(Result.parse(result).text);
 		let a = my_split(text,35,40,'ja-JP');
 		recognized_text_list = [];
 		let j=0;
@@ -434,8 +446,8 @@ function recognizer_amivoice() {
 		Wrp.TRACE = function(message){ console.log('# TRACE:'+message); };
 	}
 
-	function start_(){ if ( state == 0 ) { Wrp.issue(); } };
-	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } };
+	function start_(){ if ( state == 0 ) { Wrp.issue(); } mic.start(); };
+	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } mic.stop(); };
 	function status_(){ change_state(state); return state; };
 	function set_dic_(dictionary){ Wrp.profileWords = dictionary.join('|'); };
 	change_state(0);
@@ -482,7 +494,6 @@ function recognizer_default() {
 	}
 
 	var recognizer_ = {
-		use_microphone : true, 
 		start : start_,
 		stop : stop_,
 		status : status_,
@@ -490,14 +501,15 @@ function recognizer_default() {
 		set_dic : ()=>{ alert('set_dic is not supported'); },
 		on_change_state : undefined
 	};
+	var mic = new mic_monitor_t('#recognition-control');
 
 	function change_state(i) {
 		state = i;
 		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
 	};
 
-	function start_(){ if ( state == 0 ) { sprec.start(); } };
-	function stop_(){ change_state(1); sprec.stop(); };
+	function start_() { if ( state == 0 ) { sprec.start(); } mic.start(); };
+	function stop_() { change_state(1); sprec.stop(); mic.stop(); };
 	function status_(){ change_state(state); return state; };
 	function set_lang_(lang){ sprec.lang = lang; if ( state == 2 ) { sprec.stop(); } };
 	change_state(0);
@@ -514,60 +526,6 @@ function recognition_control_update(state) {
 			$('#recognition-engine').trigger('hide.bs.dropdown');
 			recognizer.start();
 			break;
-		}
-	}
-}
-
-class mic_device_t {
-	#ui_element;
-	#context;
-	#analyzer;
-	#stream;
-	#source;
-	#data;
-	#timer;
-	#tooltip;
-	label = '未確認';
-
-	constructor(s) {
-		this.#ui_element = s;
-		this.#timer = 0;
-		this.#context = new AudioContext();
-		this.#analyzer = this.#context.createAnalyser();
-	}
-	async init() {
-		this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-		this.#source = this.#context.createMediaStreamSource(this.#stream);
-		this.#source.connect(this.#analyzer);
-		this.#data = new Uint8Array(this.#analyzer.fftSize);
-		const device_id = this.#stream.getAudioTracks()[0].getSettings().deviceId;
-		const l = await navigator.mediaDevices.enumerateDevices();
-		let label;
-		l.forEach((device)=>{ if ( device.kind == 'audioinput' && device.deviceId == device_id ) { label = device.label; }; });
-		this.label = label;
-	}
-	update() {
-		this.#analyzer.getByteTimeDomainData(this.#data);
-		const d = Array.from(this.#data);
-		const pk = Math.min(255,4*d.reduce((acc,c)=>Math.max(acc,Math.abs(c-128)),0));
-		$(this.#ui_element).css('background-color','rgb(0,'+pk+',0)');
-	}
-	start() {
-		this.init().then(()=>{
-			if ( this.#context.state !== 'running' ) { this.#context.resume(); }
-			this.#timer = setInterval(()=>{this.update();},100);
-			$(this.#ui_element).attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label});
-			this.#tooltip = new bootstrap.Tooltip($(this.#ui_element)[0],{trigger:'hover'});
-		});
-	}
-	stop() {
-		if ( this.#timer > 0 ) {
-			clearInterval(this.#timer);
-			this.#timer = 0;
-			this.#source.disconnect();
-			this.#stream.getTracks().forEach( track => track.stop() );
-			this.#tooltip.dispose();
-			$(this.#ui_element).removeAttr('data-bs-toggle data-bs-placement title');
 		}
 	}
 }
@@ -626,7 +584,7 @@ function send( status ) {
 		var responce = new Object();
 		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
 		if ( status != 8 && screen_mode == 0 ) {
-			responce.text = $('#my-text').val();
+			responce.text = ( taker_name.length != 0 && my_text_index == -1 ? taker_name+"）" : "" )+$('#my-text').val();
 			responce.text_index = my_text_index;
 			responce.voice_text = [];
 			if ( recognition_local == false ) {
@@ -730,7 +688,7 @@ async function receive(event) {
 		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning'); // whiteboard-table は縮小せず空白に。
 		responce.whiteboard.forEach((c)=>{
 			let o = whiteboard[c.i];
-			let s = translate_text(o).replace(/\n/g,'<br>');
+			let s = html_encode(translate_text(o));
 			if ( o.i < t.length ) {
 				let x = t.eq(o.i);
 				x.attr('name',o.i).html(s);
@@ -889,272 +847,271 @@ function shortcut_to_cookie() {
 	document.cookie = 'font-size='+encodeURI($('#font-size li').filter('.text-bg-primary').data('fs'));
 }
 
-$(document).ready( function(){
-	set_font_size('fs-4');
-	set_theme('dark');
-	set_screen_mode(0);
-	shortcut_from_cookie();
-	textarea_height = $('#my-text').height();
+$('#taker-name').on('change',function(){ taker_name = $(this).val(); });
 
-	// 画面 resize は window ではなく window.visualViewport で処理する。
-	// #whiteboad-div の resize は見る必要ない。
-	const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
-	$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
-	window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
-	$(window).on("load orientationchange",()=>{ set_screen_mode(); });
-	$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
-	$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
-	$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
-	$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
+set_font_size('fs-4');
+set_theme('dark');
+set_screen_mode(0);
+shortcut_from_cookie();
+textarea_height = $('#my-text').height();
 
-	$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_theme($(clickEvent.target).data('theme')); } });
-	$('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
-			set_screen_mode(parseInt($(clickEvent.target).data('mode')));
-			send(0);
-		}
-	});
-	$('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_font_size($(clickEvent.target).data('fs')); } });
-	$('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
-			$('#translate-lang li.text-bg-primary').removeClass('text-bg-primary');
-			let lang = $(clickEvent.target).addClass('text-bg-primary').data('lang');
-			if ( lang != translate_lang_to ) {
-				translate_lang_to = lang;
-				let t = $('#whiteboard-table > tr > td');
-				whiteboard.forEach((c)=>{
-					let s = translate_text(c).replace(/\n/g,'<br>');
-					if ( c.i < t.length ) { t.eq(c.i).attr('name',c.i).html(s); }
-				});
-			}
-		}
-	});
+// 画面 resize は window ではなく window.visualViewport で処理する。
+// #whiteboad-div の resize は見る必要ない。
+const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
+$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
+window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
+$(window).on("load orientationchange",()=>{ set_screen_mode(); });
+$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
+$('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
+$('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
+$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
 
-	$('#recognition-dic').on('click',function(){ $('#recognition-dic-load').click(); });
-	$('#recognition-dic-load').on('change',function(){
-		if ( this.files.length == 1 ) {
-			let blob = this.files[0];
-			let reader = new FileReader();
-			reader.onload = function(){
-				let dic = [];
-				reader.result.split(/\r*\n/).forEach(a=>{
-					var c = a.split(/\s+/);
-					if ( c[0].length != 0 && c[1].length != 0 ) { dic.push(c[0]+' '+c[1]); }
-				});
-				recognizer.set_dic(dic);
-				$('#recognition-dic-load').val('');
-				$('#recognition-dic').blur();
-			};
-			reader.readAsText(blob);
-		}
-	});
-	$('#recognition-control').on('click',function(event){
-		let x = $('#recognition-engine li').filter('.text-bg-primary').data('engine');
-		switch ( $('#recognition-control').val() ) {
-			case '0' : {
-				if ( recognizer.use_microphone && mic_device == null ) { mic_device = new mic_device_t('#recognition-control'); }
-				recognizer.start();
-				if ( recognizer.use_microphone ) { mic_device.start(); }
-				break;
-			}
-			case '2' : { recognizer.stop(); if ( recognizer.use_microphone ) { mic_device.stop(); } break; }
-			case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
-		}
-	});
-	$('#recognition-engine').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
-			$('#recognition-engine li.text-bg-primary').removeClass('text-bg-primary');
-			$(clickEvent.target).addClass('text-bg-primary');
-		}
-		let x = $('#recognition-engine li').filter('.text-bg-primary');
-		set_recognition_engine(x.data('engine'));
-		$('#recognition-engine button').text(x.text());
-	});
-//	$('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
-	$('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
-			$('#recognition-lang li.text-bg-primary').removeClass('text-bg-primary');
-			let x = $(clickEvent.target).addClass('text-bg-primary');
-			recognizer.set_lang(x.data('lang'));
-			$('#recognition-lang button').text(x.text());
-		}
-	});
-
-	$('#my-text').on('input',function(event){
-		let o = $('#my-text')[0];
-		if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
+$('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_theme($(clickEvent.target).data('theme')); } });
+$('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
+	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+		set_screen_mode(parseInt($(clickEvent.target).data('mode')));
 		send(0);
-	});
+	}
+});
+$('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_font_size($(clickEvent.target).data('fs')); } });
+$('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
+	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+		$('#translate-lang li.text-bg-primary').removeClass('text-bg-primary');
+		let lang = $(clickEvent.target).addClass('text-bg-primary').data('lang');
+		if ( lang != translate_lang_to ) {
+			translate_lang_to = lang;
+			let t = $('#whiteboard-table > tr > td');
+			whiteboard.forEach((c)=>{
+				let s = html_encode(translate_text(c));
+				if ( c.i < t.length ) { t.eq(c.i).attr('name',c.i).html(s); }
+			});
+		}
+	}
+});
 
-	$('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
-		if ( event.button == 0 ) {
+$('#recognition-dic').on('click',function(){ $('#recognition-dic-load').click(); });
+$('#recognition-dic-load').on('change',function(){
+	if ( this.files.length == 1 ) {
+		let blob = this.files[0];
+		let reader = new FileReader();
+		reader.onload = function(){
+			let dic = [];
+			reader.result.split(/\r*\n/).forEach(a=>{
+				var c = a.split(/\s+/);
+				if ( c[0].length != 0 && c[1].length != 0 ) { dic.push(c[0]+' '+c[1]); }
+			});
+			recognizer.set_dic(dic);
+			$('#recognition-dic-load').val('');
+			$('#recognition-dic').blur();
+		};
+		reader.readAsText(blob);
+	}
+});
+$('#recognition-control').on('click',function(event){
+	let x = $('#recognition-engine li').filter('.text-bg-primary').data('engine');
+	switch ( $('#recognition-control').val() ) {
+		case '0' : { recognizer.start(); break; }
+		case '2' : { recognizer.stop(); break; }
+		case '9' : { $('#recognition-engine').trigger('hide.bs.dropdown'); break; }
+	}
+});
+$('#recognition-engine').on('hide.bs.dropdown',({clickEvent})=>{
+	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+		$('#recognition-engine li.text-bg-primary').removeClass('text-bg-primary');
+		$(clickEvent.target).addClass('text-bg-primary');
+	}
+	let x = $('#recognition-engine li').filter('.text-bg-primary');
+	set_recognition_engine(x.data('engine'));
+	$('#recognition-engine button').text(x.text());
+});
+// $('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
+$('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{
+	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+		$('#recognition-lang li.text-bg-primary').removeClass('text-bg-primary');
+		let x = $(clickEvent.target).addClass('text-bg-primary');
+		recognizer.set_lang(x.data('lang'));
+		$('#recognition-lang button').text(x.text());
+	}
+});
+
+$('#my-text').on('input',function(event){
+	let o = $('#my-text')[0];
+	if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
+	send(0);
+});
+
+$('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
+	if ( event.button == 0 ) {
+		if ( my_text_index != -1 ) {
+			$('#my-text').val(my_text_previous);
+			send(1);
+			my_text_previous = '';
+			$('#my-text').val('').height(textarea_height);
+		}
+		console.log('text()='+$(this).text());
+		console.log('val()='+$(this).val());
+		console.log('html()='+$(this).html());
+		my_text_index = parseInt($(this).attr('name'));
+		my_text_previous = html_decode($(this).html());
+		$('#my-text').val(my_text_previous).focus().trigger('input');
+	}
+});
+
+$('#pre-roll').on('dblclick',function(event){
+	if ( event.button == 0 ) {
+		$('#my-text').val(get_current_line()).focus().trigger('input');
+	}
+});
+
+$(document).on('keydown',function(event){
+	if ( event.target == $('#pre-roll').get(0) ) {
+		switch ( event.key ) {
+		case 'F1' :
+			event.preventDefault();
+			$('#my-text').val(get_current_line()); send(1); $('#my-text').val('');
+			break;
+		case 'Escape' :
+			event.preventDefault();
+			$('#pre-roll').val('');
+			break;
+		}
+	}
+	else if ( event.target == $('#my-text')[0] ) {
+		switch ( event.key ) {
+		case 'Enter' :
+			if ( event.shiftKey ) {
+				var num = $('#my-text').val().split('\n').length+1;
+				$('#my-text').prop('rows',num);
+			}
+			else {
+				event.preventDefault();
+				send(1);
+				if ( $('#speech').is(':checked') == true ) {
+					const uttr = new SpeechSynthesisUtterance()
+					uttr.text = $('#my-text').val();
+					speechSynthesis.speak(uttr);
+				}
+				$('#my-text').val('').prop('rows',1).height(textarea_height);
+				my_text_index = -1;
+				my_text_previous = '';
+			}
+			break;
+		case 'Escape' :
+			event.preventDefault();
 			if ( my_text_index != -1 ) {
 				$('#my-text').val(my_text_previous);
 				send(1);
 				my_text_previous = '';
-				$('#my-text').val('').height(textarea_height);
 			}
-			my_text_index = parseInt($(this).attr('name'));
-			my_text_previous = $(this).html().replace(/<br>/g,'\n');
-			$('#my-text').val(my_text_previous).focus().trigger('input');
+			$('#my-text').val('').height(textarea_height);
+			my_text_index = -1;
+			break;
 		}
-	});
-
-	$('#pre-roll').on('dblclick',function(event){
-		if ( event.button == 0 ) {
-			$('#my-text').val(get_current_line()).focus().trigger('input');
-		}
-	});
-
-	$(document).on('keydown',function(event){
-		if ( event.target == $('#pre-roll').get(0) ) {
-			switch ( event.key ) {
-			case 'F1' :
-				event.preventDefault();
-				$('#my-text').val(get_current_line()); send(1); $('#my-text').val('');
-				break;
-			case 'Escape' :
-				event.preventDefault();
-				$('#pre-roll').val('');
-				break;
-			}
-		}
-		else if ( event.target == $('#my-text')[0] ) {
-			switch ( event.key ) {
-			case 'Enter' :
-				if ( event.shiftKey ) {
-					var num = $('#my-text').val().split('\n').length+1;
-					$('#my-text').prop('rows',num);
-				}
-				else {
-					event.preventDefault();
-					send(1);
-					if ( $('#speech').is(':checked') == true ) {
-						const uttr = new SpeechSynthesisUtterance()
-						uttr.text = $('#my-text').val();
-						speechSynthesis.speak(uttr);
-					}
-					$('#my-text').val('').prop('rows',1).height(textarea_height);
-					my_text_index = -1;
-					my_text_previous = '';
-				}
-				break;
-			case 'Escape' :
-				event.preventDefault();
-				if ( my_text_index != -1 ) {
-					$('#my-text').val(my_text_previous);
-					send(1);
-					my_text_previous = '';
-				}
-				$('#my-text').val('').height(textarea_height);
-				my_text_index = -1;
-				break;
-			}
-		}
-		switch ( event.key ) {
-			case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
-			case 'F2' : event.preventDefault(); append_input($('#key-2').val()); break;
-			case 'F3' : event.preventDefault(); append_input($('#key-3').val()); break;
-			case 'F4' : event.preventDefault(); append_input($('#key-4').val()); break;
-			case 'F5' : event.preventDefault(); append_input($('#key-5').val()); break;
-			case 'F6' : event.preventDefault(); append_input($('#key-6').val()); break;
-			case 'F7' : event.preventDefault(); append_input($('#key-7').val()); break;
-			case 'F8' : event.preventDefault(); append_input($('#key-8').val()); break;
-			case 'F9' : event.preventDefault(); append_input($('#key-9').val()); break;
-		}
-	});
-
-	async function save_shortcut() {
-		let a = [];
-		a.push(`F1 ${$('#key-1').val()}\n`);
-		a.push(`F2 ${$('#key-2').val()}\n`);
-		a.push(`F3 ${$('#key-3').val()}\n`);
-		a.push(`F4 ${$('#key-4').val()}\n`);
-		a.push(`F5 ${$('#key-5').val()}\n`);
-		a.push(`F6 ${$('#key-6').val()}\n`);
-		a.push(`F7 ${$('#key-7').val()}\n`);
-		a.push(`F8 ${$('#key-8').val()}\n`);
-		a.push(`F9 ${$('#key-9').val()}\n`);
-		const b = new Blob(a,{type:'text/plain'});
-		const f = await window.showSaveFilePicker({suggestedName:'shortcut.txt'});	// ファイル保存ダイアログを表示して FileSystemFileHandle オブジェクトを取得
-		const s = await f.createWritable();	// FileSystemWritableFileStream オブジェクトを取得
-		await s.write(b);	// テキストデータをファイルに書き込む
-		await s.close();	// ファイルを閉じる
 	}
+	switch ( event.key ) {
+		case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
+		case 'F2' : event.preventDefault(); append_input($('#key-2').val()); break;
+		case 'F3' : event.preventDefault(); append_input($('#key-3').val()); break;
+		case 'F4' : event.preventDefault(); append_input($('#key-4').val()); break;
+		case 'F5' : event.preventDefault(); append_input($('#key-5').val()); break;
+		case 'F6' : event.preventDefault(); append_input($('#key-6').val()); break;
+		case 'F7' : event.preventDefault(); append_input($('#key-7').val()); break;
+		case 'F8' : event.preventDefault(); append_input($('#key-8').val()); break;
+		case 'F9' : event.preventDefault(); append_input($('#key-9').val()); break;
+	}
+});
 
-	$('#shortcut-load-file').on('change',function(){
-		if ( this.files.length == 1 ) {
-			var blob = this.files[0];
-			var reader = new FileReader();
-			reader.readAsText(blob);
-			reader.onload = function(){
-				reader.result.split(/\r*\n/).forEach(a=>{
-					var c = a.split(/\s/);
-					switch (c[0]) {
-						case 'F1' : $('#key-1').val(c[1]); break;
-						case 'F2' : $('#key-2').val(c[1]); break;
-						case 'F3' : $('#key-3').val(c[1]); break;
-						case 'F4' : $('#key-4').val(c[1]); break;
-						case 'F5' : $('#key-5').val(c[1]); break;
-						case 'F6' : $('#key-6').val(c[1]); break;
-						case 'F7' : $('#key-7').val(c[1]); break;
-						case 'F8' : $('#key-8').val(c[1]); break;
-						case 'F9' : $('#key-9').val(c[1]); break;
-					}
-				});
-				$('#shortcut-load-file').val('');
+async function save_shortcut() {
+	let a = [];
+	a.push(`F1 ${$('#key-1').val()}\n`);
+	a.push(`F2 ${$('#key-2').val()}\n`);
+	a.push(`F3 ${$('#key-3').val()}\n`);
+	a.push(`F4 ${$('#key-4').val()}\n`);
+	a.push(`F5 ${$('#key-5').val()}\n`);
+	a.push(`F6 ${$('#key-6').val()}\n`);
+	a.push(`F7 ${$('#key-7').val()}\n`);
+	a.push(`F8 ${$('#key-8').val()}\n`);
+	a.push(`F9 ${$('#key-9').val()}\n`);
+	const b = new Blob(a,{type:'text/plain'});
+	const f = await window.showSaveFilePicker({suggestedName:'shortcut.txt'});	// ファイル保存ダイアログを表示して FileSystemFileHandle オブジェクトを取得
+	const s = await f.createWritable();	// FileSystemWritableFileStream オブジェクトを取得
+	await s.write(b);	// テキストデータをファイルに書き込む
+	await s.close();	// ファイルを閉じる
+}
+
+$('#shortcut-load-file').on('change',function(){
+	if ( this.files.length == 1 ) {
+		var blob = this.files[0];
+		var reader = new FileReader();
+		reader.readAsText(blob);
+		reader.onload = function(){
+			reader.result.split(/\r*\n/).forEach(a=>{
+				var c = a.split(/\s/);
+				switch (c[0]) {
+					case 'F1' : $('#key-1').val(c[1]); break;
+					case 'F2' : $('#key-2').val(c[1]); break;
+					case 'F3' : $('#key-3').val(c[1]); break;
+					case 'F4' : $('#key-4').val(c[1]); break;
+					case 'F5' : $('#key-5').val(c[1]); break;
+					case 'F6' : $('#key-6').val(c[1]); break;
+					case 'F7' : $('#key-7').val(c[1]); break;
+					case 'F8' : $('#key-8').val(c[1]); break;
+					case 'F9' : $('#key-9').val(c[1]); break;
+				}
+			});
+			$('#shortcut-load-file').val('');
+		};
+	}
+});
+
+$('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
+	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+		let job = $(clickEvent.target).data('job');
+		if ( job == 'load' ) { $('#shortcut-load-file').click(); }
+		if ( job == 'save') { save_shortcut(); }
+	}
+});
+
+switch ( location.protocol ) {
+	case 'file:':
+		host = "";
+		break;
+	case 'https:': 
+	case 'http:': 
+		host = location.host;
+		socket_open(host);
+		break;
+}
+
+$('#translate-lang').hide();
+$('#recognition-engine').hide();
+
+fetch_token('./tools/token.json').then((ok)=>{
+	if (ok) {
+		let n = 0;
+		if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
+		if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
+		if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); n++; }
+		if ( n != 0 ) $('#recognition-engine').show();
+		if ( 'google-translate' in token ) {
+			translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
+				let api_key = token['google-translate'].key;
+				if ( translate_lang_to == 'none' ) { return c.text; }
+				if (!( translate_lang_to in c )) {
+					$.ajax(
+						"https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
+						{type:'post',dataType:'json',async:false})
+						.done((result)=>{ c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); })
+						.fail(()=>{ alert("error in google-translate"); });
+				}
+				return c[translate_lang_to];
 			};
+			$('#translate-lang').show();
 		}
-	});
-
-	$('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
-		if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
-			let job = $(clickEvent.target).data('job');
-			if ( job == 'load' ) { $('#shortcut-load-file').click(); }
-			if ( job == 'save') { save_shortcut(); }
-		}
-	});
-
-	switch ( location.protocol ) {
-		case 'file:':
-			host = "";
-			break;
-		case 'https:': 
-		case 'http:': 
-			host = location.host;
-			socket_open(host);
-			break;
 	}
-
-	$('#translate-lang').hide();
-	$('#recognition-engine').hide();
-
-	fetch_token('./tools/token.json').then((ok)=>{
-		if (ok) {
-			let n = 0;
-			if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
-			if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
-			if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); n++; }
-			if ( n != 0 ) $('#recognition-engine').show();
-			if ( 'google-translate' in token ) {
-				translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
-					let api_key = token['google-translate'].key;
-					if ( translate_lang_to == 'none' ) { return c.text; }
-					if (!( translate_lang_to in c )) {
-						$.ajax(
-							"https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
-							{type:'post',dataType:'json',async:false})
-							.done((result)=>{ c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); })
-							.fail(()=>{ alert("error in google-translate"); });
-					}
-					return c[translate_lang_to];
-				};
-				$('#translate-lang').show();
-			}
-		}
-		if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
-		if ( location.protocol == 'https:' ) { $('#clear').parent().show(); } else { $('#clear').parent().hide(); }
-	});
+	if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
+	if ( location.protocol == 'https:' ) { $('#clear').parent().show(); } else { $('#clear').parent().hide(); }
+});
 
 //	$('#share-app').on('click',function(){
 //		get_app().then((ok)=>{
@@ -1179,9 +1136,9 @@ $(document).ready( function(){
 //		return ok;
 //	}
 
-	$('#pi-control').hide();
-	if ( location.protocol == 'https:' ) { fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } }); }
-});
+$('#pi-control').hide();
+if ( location.protocol == 'https:' ) { fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } }); }
+
 </script>
 </body>
 </html>

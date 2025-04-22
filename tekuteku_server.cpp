@@ -57,7 +57,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-04-11";
+static std::string m_version = "build 2025-04-20";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -479,11 +479,14 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 						if ( text_index == -1 ) {
 							m_whiteboard.push_back(whiteboard_element_t(text,-1,info.num));
 						}
-						else if ( text_index >= 0 && text_index < m_whiteboard.size() ) {
-							auto& c = m_whiteboard[text_index];
-							c.text = text;
-							c.edit = 2;
-							c.tobe_sent = true;
+						else if ( text_index >= 0 ) {
+							if ( text_index < m_whiteboard.size() ) {
+								auto& c = m_whiteboard[text_index];
+								c.text = text;
+								c.edit = 2;
+								c.tobe_sent = true;
+							}
+							else m_whiteboard.push_back(whiteboard_element_t(text,-1,info.num)); // 未確定の音声認識結果で削除されたものを編集した場合
 						}
 						else log((boost::format("unexpected text %s %d '%s'\n") % info.id % text_index % text).str());
 						whiteboard_updated = true;
