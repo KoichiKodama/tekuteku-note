@@ -12,6 +12,7 @@
 	#include <ifaddrs.h>
 #endif
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <fstream>
 #include <memory>
@@ -25,6 +26,7 @@
 #include <functional>
 #include <chrono>
 #include <filesystem>
+#include <regex>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -40,7 +42,6 @@
 #include <boost/process.hpp>
 
 #include <json.hpp>
-#include <k_time.hpp>
 #include <tray.hpp>
 
 #ifdef _WINDOWS
@@ -57,7 +58,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-04-20";
+static std::string m_version = "build 2025-04-24";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -69,6 +70,18 @@ static int debug_write = 0;
 static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
 
+std::string k_date_time( int days_off = 0 ) {
+	tzset();
+	time_t t = time(nullptr);
+	tm* l = localtime(&t);
+	if ( days_off != 0 ) {
+		l->tm_mday -= days_off;
+		t = mktime(l);
+		l = localtime(&t);
+	}
+	return ( boost::format("%04d-%02d-%02d %02d:%02d:%02d") % (l->tm_year+1900) % (l->tm_mon+1) % (l->tm_mday) % (l->tm_hour) % (l->tm_min) % (l->tm_sec) ).str();
+}
+
 void truncate_log() {
 	if ( std::filesystem::exists(m_logfile) == false ) return;
 	std::string fname_old = m_logfile+".old";
@@ -78,8 +91,10 @@ void truncate_log() {
 	if (!ifs) return;
 	if (!ofs) return;
 	std::string date_min = k_date_time(7);	// 7日以前のログを削除する
+	std::regex r(R"(^[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})");
 	std::string s;
 	while ( std::getline(ifs,s) ) {
+		if ( std::regex_match(s,r) == false ) continue;
 		if ( s.compare(0,date_min.length(),date_min) > 0 ) ofs << s << "\n";
 	}
 	ifs.close();
