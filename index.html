@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-04-22</title>
+<title>てくてくノート ver 2025-04-26</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -174,6 +174,7 @@
 <script type="text/javascript">
 'use strict';
 
+var tekuteku_url = "";
 var taker_name = "";
 var screen_mode = 0; // 0:標準, 1:見るだけ, 2:字幕表示
 var translate_lang_to = 'none';
@@ -259,7 +260,8 @@ function recognizer_vosk() {
 	var vosk_socket = null;
 	var mic = new mic_monitor_t('#recognition-control');
 	var mic_stream;
-	
+	var vosk_url = tekuteku_url.replace(/^(wss|ws):\/\/[^:\?\/]+/,"$&:")+token["vosk"].port;
+
 	function change_state(i) {
 		state = i;
 		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
@@ -267,15 +269,15 @@ function recognizer_vosk() {
 
 	function start_() {
 		if ( state != 0 ) return;
-		vosk_socket = new WebSocket(token["vosk"].server);
+		vosk_socket = new WebSocket(vosk_url); // token["vosk"].server;
 		vosk_socket.onopen = function(event){
 			change_state(1);
-			vosk_socket.send(`{"job":"start","tekuteku_url":"ws://localhost","vosk_model":"model-ja-small"}`);
+			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url}","vosk_model":"${token["vosk"].model}"}`);
 			mic_stream = new mic_stream_t(vosk_socket);
 			mic_stream.start();
 			mic.start();
 		};
-		vosk_socket.onclose = function(event){ change_state(0); };
+		vosk_socket.onclose = function(event){ mic.stop(); mic_stream.stop(); change_state(0); };
 		vosk_socket.onerror = function(event){ mic.stop(); mic_stream.stop(); change_state(9); };
 		vosk_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
@@ -311,6 +313,7 @@ function recognizer_yyprobe() {
 	var yy_socket = null;
 	var mic = new mic_monitor_t('#recognition-control');
 	var mic_stream;
+	var yy_url = tekuteku_url.replace(/^(wss|ws):\/\/[^:\?\/]+/,"$&:")+token["yyprobe"].port;
 
 	function change_state(i) {
 		state = i;
@@ -320,14 +323,14 @@ function recognizer_yyprobe() {
 	function start_() {
 		if ( state != 0 ) return;
 		change_state(1);
-		yy_socket = new WebSocket(token["yyprobe"].server);
+		yy_socket = new WebSocket(yy_url);
 		yy_socket.onopen = function(event){
-			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"ws://localhost"}`);
+			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"${tekuteku_url}"}`);
 			mic_stream = new mic_stream_t(yy_socket);
 			mic_stream.start();
 			mic.start();
 		};
-		yy_socket.onclose = function(event){ change_state(0); };
+		yy_socket.onclose = function(event){ mic.stop(); mic_stream.stop(); change_state(0); };
 		yy_socket.onerror = function(event){ mic.stop(); mic_stream.stop(); change_state(9); };
 		yy_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
@@ -359,8 +362,6 @@ function recognizer_yyprobe() {
 
 function recognizer_amivoice() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var debug = false;
-
 	var recognizer_ = {
 		start : start_,
 		stop : stop_,
@@ -402,49 +403,23 @@ function recognizer_amivoice() {
 		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
 	};
 
-	if ( debug == false ) {
-		Wrp.connectStarted = function(){ change_state(1); };
-		Wrp.connectEnded = function(){};
-		Wrp.disconnectStarted = function(){ change_state(1); };
-		Wrp.disconnectEnded = function(){ change_state(0); };
-		Wrp.feedDataResumeStarted = function(){};
-		Wrp.feedDataResumeEnded = function(){ change_state(2); };
-		Wrp.feedDataPauseStarted = function(){};
-		Wrp.feedDataPauseEnded = function(reason){};
-		Wrp.utteranceStarted = function(time){};
-		Wrp.utteranceEnded = function(time){};
-		Wrp.issueStarted = function(){ change_state(1); };
-		Wrp.issueEnded = function(){ Wrp.feedDataResume(); };
-		Wrp.resultCreated = function(){ recognized_text_list = []; send(2); };
-		Wrp.resultUpdated = function(result){ update_result(result,false); };
-		Wrp.resultFinalized = function(result){ update_result(result,true); };
-		Wrp.eventNotified = function(event_id,event_message){};
-		Wrp.TRACE = function(message){};
-	}
-	else {
-		Wrp.connectStarted = function(){ change_state(1); console.log('# connectStarted'); };
-		Wrp.connectEnded = function(){ console.log('# connectEnded'); };
-		Wrp.disconnectStarted = function(){ change_state(1); console.log('# disconnectStarted'); };
-		Wrp.disconnectEnded = function(){ change_state(0); console.log('# disconnectEnded'); };
-		Wrp.feedDataResumeStarted = function(){ console.log('# feedDataResumeStarted'); };
-		Wrp.feedDataResumeEnded = function(){ change_state(2); console.log('# feedDataResumeEnded'); };
-		Wrp.feedDataPauseStarted = function(){ console.log('# feedDataPauseStarted'); };
-		Wrp.feedDataPauseEnded = function(reason){ console.log('# feedDataPauseEnded'+reason); };
-		Wrp.utteranceStarted = function(time){ console.log('# utteranceStarted'); };
-		Wrp.utteranceEnded = function(time){ console.log('# utteranceEnded'); };
-		Wrp.issueStarted = function(){ change_state(1); console.log('# issueStarted'); };
-		Wrp.issueEnded = function(){
-			console.log('# issueEnded');
-			console.log('grammarFileNames='+Wrp.grammarFileNames);
-			console.log('authorization='+Wrp.authorizationElement.value);
-			Wrp.feedDataResume();
-		};
-		Wrp.resultCreated = function(){ console.log('# resultCreated'); recognized_text_list = []; send(2); };
-		Wrp.resultUpdated = function(result){ console.log('# resultUpdated'); update_result(result,false); };
-		Wrp.resultFinalized = function(result){ console.log('# resultFinalized'); update_result(result,true); };
-		Wrp.eventNotified = function(event_id,event_message){ console.log("# eventNotified:[" + event_id + "][" + event_message + "]"); };
-		Wrp.TRACE = function(message){ console.log('# TRACE:'+message); };
-	}
+	Wrp.connectStarted = function(){ change_state(1); };
+	Wrp.connectEnded = function(){};
+	Wrp.disconnectStarted = function(){ change_state(1); };
+	Wrp.disconnectEnded = function(){ change_state(0); };
+	Wrp.feedDataResumeStarted = function(){};
+	Wrp.feedDataResumeEnded = function(){ change_state(2); };
+	Wrp.feedDataPauseStarted = function(){};
+	Wrp.feedDataPauseEnded = function(reason){};
+	Wrp.utteranceStarted = function(time){};
+	Wrp.utteranceEnded = function(time){};
+	Wrp.issueStarted = function(){ change_state(1); };
+	Wrp.issueEnded = function(){ Wrp.feedDataResume(); };
+	Wrp.resultCreated = function(){ recognized_text_list = []; send(2); };
+	Wrp.resultUpdated = function(result){ update_result(result,false); };
+	Wrp.resultFinalized = function(result){ update_result(result,true); };
+	Wrp.eventNotified = function(event_id,event_message){};
+	Wrp.TRACE = function(message){};
 
 	function start_(){ if ( state == 0 ) { Wrp.issue(); } mic.start(); };
 	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } mic.stop(); };
@@ -456,8 +431,6 @@ function recognizer_amivoice() {
 
 function recognizer_default() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var debug = false;
-
 	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 	var sprec = new SpeechRecognition();
 	sprec.continuous = true;
@@ -605,8 +578,7 @@ function send( status ) {
 const k_success = 'text-success-emphasis bg-success-subtle border border-success-subtle';
 const k_warning = 'text-warning-emphasis bg-warning-subtle border border-warning-subtle';
 
-function socket_open( host ) {
-	let url = ( location.protocol == 'http:' ? 'ws://' : 'wss://' )+host+location.search;
+function socket_open(url) {
 	if ( connected == true ) { socket_close(); }
 	socket = new WebSocket(url);
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
@@ -948,9 +920,6 @@ $('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
 			my_text_previous = '';
 			$('#my-text').val('').height(textarea_height);
 		}
-		console.log('text()='+$(this).text());
-		console.log('val()='+$(this).val());
-		console.log('html()='+$(this).html());
 		my_text_index = parseInt($(this).attr('name'));
 		my_text_previous = html_decode($(this).html());
 		$('#my-text').val(my_text_previous).focus().trigger('input');
@@ -1072,6 +1041,7 @@ $('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
 	}
 });
 
+/*
 switch ( location.protocol ) {
 	case 'file:':
 		host = "";
@@ -1081,7 +1051,7 @@ switch ( location.protocol ) {
 		host = location.host;
 		socket_open(host);
 		break;
-}
+}*/
 
 $('#translate-lang').hide();
 $('#recognition-engine').hide();
@@ -1109,8 +1079,8 @@ fetch_token('./tools/token.json').then((ok)=>{
 			$('#translate-lang').show();
 		}
 	}
-	if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
-	if ( location.protocol == 'https:' ) { $('#clear').parent().show(); } else { $('#clear').parent().hide(); }
+//	if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
+//	if ( location.protocol == 'https:' ) { $('#clear').parent().show(); } else { $('#clear').parent().hide(); }
 });
 
 //	$('#share-app').on('click',function(){
@@ -1136,8 +1106,26 @@ fetch_token('./tools/token.json').then((ok)=>{
 //		return ok;
 //	}
 
+if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
 $('#pi-control').hide();
-if ( location.protocol == 'https:' ) { fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } }); }
+switch (location.protocol) {
+	case 'https:':
+		host = location.host;
+		tekuteku_url = "wss://"+location.host+location.search;
+		$('#clear').parent().show();
+		fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } });
+		break;
+	case 'http:':
+		host = location.host;
+		tekuteku_url = "ws://"+location.host+location.search;
+		$('#clear').parent().hide();
+		break;
+	default:
+		alert("間違った操作です");
+		$('#clear').parent().hide();
+		break;
+}
+if ( tekuteku_url.length != 0 ) socket_open(tekuteku_url);
 
 </script>
 </body>
