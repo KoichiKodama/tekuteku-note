@@ -1,6 +1,7 @@
 ﻿#ifdef _WINDOWS
 	#include <SDKDDKVer.h>
 	#define WIN32_LEAN_AND_MEAN
+	#define NOMINMAX
 	#include <windows.h>
 	#include <shellapi.h>
 	#include <winsock2.h>
@@ -58,7 +59,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-04-24";
+static std::string m_version = "build 2025-04-29";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -69,6 +70,7 @@ static int debug_async_read = 0;
 static int debug_write = 0;
 static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
+static int debug_whiteboard_search = 0;
 
 std::string k_date_time( int days_off = 0 ) {
 	tzset();
@@ -534,6 +536,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 							}
 						}
 					}
+					debug_whiteboard_search = std::max(debug_whiteboard_search,static_cast<int>(m_whiteboard.size()-info.whiteboard_voice_index));
 					int id_max = l[l.size()-1]["id"];
 					bool is_erased = false;
 					for (auto ii=m_whiteboard.begin()+info.whiteboard_voice_index;ii!=m_whiteboard.end();) {
@@ -805,6 +808,7 @@ void terminate_server() {
 	log((boost::format("debug_write = %d\n") % debug_write).str());
 	log((boost::format("debug_write_full = %d\n") % debug_write_full).str());
 	log((boost::format("debug_whiteboard_update = %d\n") % debug_whiteboard_update).str());
+	log((boost::format("debug_whiteboard_search = %d\n") % debug_whiteboard_search).str());
 	log("service stopped\n");
 }
 
@@ -828,18 +832,18 @@ std::string load_file_all( const std::string& fname ) {
 
 #ifdef USE_SSL
 static boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv12};
-void load_server_certificate( boost::asio::ssl::context& ctx, const std::string& fname_key, const std::string& fname_cer, const std::string& fname_cer_chain, const std::string& passwd ) {
+void load_server_certificate( boost::asio::ssl::context& ctx, const std::string& fname_key, const std::string& fname_crt, const std::string& fname_chain, const std::string& passwd ) {
 	// 証明書
 	// m_server_name の値は無関係。
 	// 証明書記載の common name でアクセスしないと NET::ERR_CERT_COMMON_NAME_INVALID となるので localhost で開いてはダメ。
 	// nii-odca4g7rsa.cer を emulsion-labo.physics.aichi-edu.ac.jp.cer の末尾にコピーすれば動作する。
 
-	ctx.set_password_callback([passwd](std::size_t,boost::asio::ssl::context_base::password_purpose) { return passwd.c_str(); });
+	if ( passwd != "-" ) ctx.set_password_callback([passwd](std::size_t,boost::asio::ssl::context_base::password_purpose) { return passwd.c_str(); });
 	ctx.use_private_key_file(fname_key.c_str(),boost::asio::ssl::context::file_format::pem);
-	std::string s = load_file_all(fname_cer);
-	if ( fname_cer_chain != "-" ) {
+	std::string s = load_file_all(fname_crt);
+	if ( fname_chain != "-" ) {
 		s += "\n";
-		s += load_file_all(fname_cer_chain);
+		s += load_file_all(fname_chain);
 	}
 	ctx.use_certificate_chain(boost::asio::const_buffer(boost::asio::buffer(s)));
 	ctx.set_options(boost::asio::ssl::context::default_workarounds|boost::asio::ssl::context::no_sslv2);
@@ -857,7 +861,7 @@ int main( int argc, char** argv ) {
 			if ( strcmp(*argv,"--ssl") == 0 ) {
 				std::string ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd;
 				argc--; argv++; m_cfg["ssl-key"] = *argv;
-				argc--; argv++; m_cfg["ssl-cer"] = *argv;
+				argc--; argv++; m_cfg["ssl-crt"] = *argv;
 				argc--; argv++; m_cfg["ssl-chain"] = *argv;
 				argc--; argv++; m_cfg["ssl-pwd"] = *argv;
 			}
@@ -877,10 +881,10 @@ int main( int argc, char** argv ) {
 		log(( boost::format("option port=%d\n") % m_port ).str());
 		#ifdef USE_SSL
 		std::string key = m_cfg["ssl-key"].get<std::string>();
-		std::string cer = m_cfg["ssl-cer"].get<std::string>();
+		std::string crt = m_cfg["ssl-crt"].get<std::string>();
 		std::string chain = m_cfg["ssl-chain"].get<std::string>();
 		std::string pwd = m_cfg["ssl-pwd"].get<std::string>();
-		load_server_certificate(ctx,key,cer,chain,pwd);
+		load_server_certificate(ctx,key,crt,chain,pwd);
 		#endif
 
 		#ifdef _WINDOWS

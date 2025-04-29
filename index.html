@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-04-26</title>
+<title>てくてくノート ver 2025-04-29</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -206,7 +206,8 @@ class recognized_text {
 	final = false;
 	tobe_sent = false;
 	id = -1;
-	constructor(text,final,i) {
+	constructor(text,final,i) { this.set(text,final,i); }
+	set(text,final,i) {
 		this.text = text;
 		this.final = final;
 		this.id = i;
@@ -269,9 +270,9 @@ function recognizer_vosk() {
 
 	function start_() {
 		if ( state != 0 ) return;
+		change_state(1);
 		vosk_socket = new WebSocket(vosk_url); // token["vosk"].server;
 		vosk_socket.onopen = function(event){
-			change_state(1);
 			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url}","vosk_model":"${token["vosk"].model}"}`);
 			mic_stream = new mic_stream_t(vosk_socket);
 			mic_stream.start();
@@ -387,9 +388,14 @@ function recognizer_amivoice() {
 	function update_result(result,is_final) {
 		let text = html_encode(Result.parse(result).text);
 		let a = my_split(text,35,40,'ja-JP');
-		recognized_text_list = [];
 		let j=0;
-		a.forEach((x)=>{ recognized_text_list.push(new recognized_text(x,is_final,j++)); });
+		a.forEach((x)=>{
+			if ( j >= recognized_text_list.length ) recognized_text_list.push(new recognized_text(x,is_final,j));
+			let y = recognized_text_list[j];
+			if ( x != y.text || is_final != y.is_final ) y.set(x,is_final,j);
+			j++;
+		});
+		recognized_text_list.splice(j);
 		if ( recognition_local == true ) {
 			let s = "";
 			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
@@ -439,12 +445,17 @@ function recognizer_default() {
 	sprec.lang = 'ja-JP';
 
 	sprec.onresult = function(event){
-		recognized_text_list = [];
 		let j=0;
 		for (let i=0;i<event.results.length;i++) {
 			let result = event.results[i];
 			let a = my_split(result[0].transcript,35,40,sprec.lang);
-			a.forEach((x)=>{ recognized_text_list.push(new recognized_text(x,result.isFinal,j++)); });
+			a.forEach((x)=>{
+				if ( j >= recognized_text_list.length ) recognized_text_list.push(new recognized_text(x,result.isFinal,j));
+				let y = recognized_text_list[j];
+				if ( x != y.text || result.isFinal != y.is_final ) y.set(x,result.isFinal,j);
+				j++;
+			});
+			recognized_text_list.splice(j);
 		}
 		if ( recognition_local == true ) {
 			let s = "";
@@ -454,17 +465,11 @@ function recognizer_default() {
 		}
 		else { send(0); }
 	}
-	sprec.onspeechstart = function(event){
-		recognized_text_list = [];
-		send(2);
-	}
+	sprec.onspeechstart = function(event){ recognized_text_list = []; send(2); }
 	sprec.onspeechend = function(event){}
 	sprec.onstart = function(){ change_state(2); }
 	sprec.onend = function(){ if ( state == 2 ) { sprec.start(); } else { change_state(0); } }
-	sprec.onerror = function(event){
-		change_state(9);
-		sprec.stop();
-	}
+	sprec.onerror = function(event){ change_state(9); sprec.stop(); }
 
 	var recognizer_ = {
 		start : start_,
