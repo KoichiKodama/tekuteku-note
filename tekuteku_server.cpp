@@ -70,7 +70,8 @@ static int debug_async_read = 0;
 static int debug_write = 0;
 static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
-static int debug_whiteboard_search = 0;
+static int debug_find_count = 0;
+static int debug_find_range = 0;
 
 std::string k_date_time( int days_off = 0 ) {
 	tzset();
@@ -522,8 +523,11 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				else info.is_readonly = true;
 				if ( json_i.contains("voice_text") == true && json_i["voice_text"].empty() == false ) {
 					auto& l = json_i["voice_text"];
-					for (const auto& x : l) {
-						auto ii = std::find_if(m_whiteboard.begin()+info.whiteboard_voice_index,m_whiteboard.end(),[x,&info]( const auto& c ){ return ( c.num == info.num && c.id == x["id"] ? true : false ); });
+					auto ii = m_whiteboard.begin()+info.whiteboard_voice_index;
+					for (int j=0;j<l.size();j++) {
+						const auto& x = l[j];
+						ii = std::find_if(ii,m_whiteboard.end(),[x,&info]( const auto& c ){ return ( c.num == info.num && c.id == x["id"] ? true : false ); });
+						if ( j == 0 ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),ii);
 						if ( ii == m_whiteboard.end() ) {
 							m_whiteboard.push_back(whiteboard_element_t(x["text"],x["id"],info.num));
 						}
@@ -536,20 +540,9 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 							}
 						}
 					}
-					debug_whiteboard_search = std::max(debug_whiteboard_search,static_cast<int>(m_whiteboard.size()-info.whiteboard_voice_index));
-					int id_max = l[l.size()-1]["id"];
-					bool is_erased = false;
-					for (auto ii=m_whiteboard.begin()+info.whiteboard_voice_index;ii!=m_whiteboard.end();) {
-						if ( (*ii).num != info.num ) { ii++; continue; }
-						if ( (*ii).id > id_max ) {
-							ii = m_whiteboard.erase(ii);
-							is_erased = true;
-						}
-						else {
-							if (is_erased) (*ii).tobe_sent = true;
-							ii++;
-						}
-					}
+					debug_find_count++;
+					debug_find_range = std::max(debug_find_range,static_cast<int>(m_whiteboard.size()-info.whiteboard_voice_index));
+					for (ii++;ii!=m_whiteboard.end();) { if ( (*ii).num != info.num ) { ii++; } else { ii = m_whiteboard.erase(ii); } }
 					whiteboard_updated = true;
 				}
 				request_broadcast.set();
@@ -808,7 +801,8 @@ void terminate_server() {
 	log((boost::format("debug_write = %d\n") % debug_write).str());
 	log((boost::format("debug_write_full = %d\n") % debug_write_full).str());
 	log((boost::format("debug_whiteboard_update = %d\n") % debug_whiteboard_update).str());
-	log((boost::format("debug_whiteboard_search = %d\n") % debug_whiteboard_search).str());
+	log((boost::format("debug_find_count = %d\n") % debug_find_count).str());
+	log((boost::format("debug_find_range = %d\n") % debug_find_range).str());
 	log("service stopped\n");
 }
 
@@ -865,8 +859,8 @@ int main( int argc, char** argv ) {
 				argc--; argv++; m_cfg["ssl-chain"] = *argv;
 				argc--; argv++; m_cfg["ssl-pwd"] = *argv;
 			}
-			else if ( strcmp(*argv,"--port") == 0 ) { argc--; argv++; m_cfg["port"] = atoi(*argv); }
 			else if ( strcmp(*argv,"--magic") == 0 ) { argc--; argv++; m_cfg["magic"] = *argv; }
+			else if ( strcmp(*argv,"--port") == 0 ) { argc--; argv++; m_cfg["port"] = atoi(*argv); }
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
 			argc--; argv++;
 		}
@@ -880,10 +874,10 @@ int main( int argc, char** argv ) {
 		truncate_log();
 		log(( boost::format("option port=%d\n") % m_port ).str());
 		#ifdef USE_SSL
-		std::string key = m_cfg["ssl-key"].get<std::string>();
-		std::string crt = m_cfg["ssl-crt"].get<std::string>();
-		std::string chain = m_cfg["ssl-chain"].get<std::string>();
-		std::string pwd = m_cfg["ssl-pwd"].get<std::string>();
+		std::string key = m_cfg["ssl"][0].get<std::string>();
+		std::string crt = m_cfg["ssl"][1].get<std::string>();
+		std::string chain = m_cfg["ssl"][2].get<std::string>();
+		std::string pwd = m_cfg["ssl"][3].get<std::string>();
 		load_server_certificate(ctx,key,crt,chain,pwd);
 		#endif
 

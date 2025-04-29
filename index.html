@@ -211,7 +211,7 @@ class recognized_text {
 		this.text = text;
 		this.final = final;
 		this.id = i;
-		this.tobe_sent = ( this.text.length == 0 ? false : true );	// 空行はここで排除する
+		this.tobe_sent = ( this.text.length == 0 ? false : true ); // 空行は送信しない
 	}
 }
 
@@ -392,7 +392,7 @@ function recognizer_amivoice() {
 		a.forEach((x)=>{
 			if ( j >= recognized_text_list.length ) recognized_text_list.push(new recognized_text(x,is_final,j));
 			let y = recognized_text_list[j];
-			if ( x != y.text || is_final != y.is_final ) y.set(x,is_final,j);
+			if ( x != y.text || is_final != y.final ) y.set(x,is_final,j);
 			j++;
 		});
 		recognized_text_list.splice(j);
@@ -452,7 +452,7 @@ function recognizer_default() {
 			a.forEach((x)=>{
 				if ( j >= recognized_text_list.length ) recognized_text_list.push(new recognized_text(x,result.isFinal,j));
 				let y = recognized_text_list[j];
-				if ( x != y.text || result.isFinal != y.is_final ) y.set(x,result.isFinal,j);
+				if ( x != y.text || result.isFinal != y.final ) y.set(x,result.isFinal,j);
 				j++;
 			});
 			recognized_text_list.splice(j);
@@ -1046,22 +1046,10 @@ $('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
 	}
 });
 
-/*
-switch ( location.protocol ) {
-	case 'file:':
-		host = "";
-		break;
-	case 'https:': 
-	case 'http:': 
-		host = location.host;
-		socket_open(host);
-		break;
-}*/
-
 $('#translate-lang').hide();
 $('#recognition-engine').hide();
 
-fetch_token('./tools/token.json').then((ok)=>{
+fetch_token('./config.json').then((ok)=>{
 	if (ok) {
 		let n = 0;
 		if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
@@ -1084,8 +1072,6 @@ fetch_token('./tools/token.json').then((ok)=>{
 			$('#translate-lang').show();
 		}
 	}
-//	if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
-//	if ( location.protocol == 'https:' ) { $('#clear').parent().show(); } else { $('#clear').parent().hide(); }
 });
 
 //	$('#share-app').on('click',function(){
