@@ -59,7 +59,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-04-29";
+static std::string m_version = "build 2025-05-01";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -854,10 +854,10 @@ int main( int argc, char** argv ) {
 		while ( argc != 0 ) {
 			if ( strcmp(*argv,"--ssl") == 0 ) {
 				std::string ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd;
-				argc--; argv++; m_cfg["ssl-key"] = *argv;
-				argc--; argv++; m_cfg["ssl-crt"] = *argv;
-				argc--; argv++; m_cfg["ssl-chain"] = *argv;
-				argc--; argv++; m_cfg["ssl-pwd"] = *argv;
+				argc--; argv++; m_cfg["ssl"].push_back(*argv);
+				argc--; argv++; m_cfg["ssl"].push_back(*argv);
+				argc--; argv++; m_cfg["ssl"].push_back(*argv);
+				argc--; argv++; m_cfg["ssl"].push_back(*argv);
 			}
 			else if ( strcmp(*argv,"--magic") == 0 ) { argc--; argv++; m_cfg["magic"] = *argv; }
 			else if ( strcmp(*argv,"--port") == 0 ) { argc--; argv++; m_cfg["port"] = atoi(*argv); }
