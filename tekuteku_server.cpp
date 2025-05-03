@@ -59,7 +59,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-01";
+static std::string m_version = "build 2025-05-03";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -71,7 +71,6 @@ static int debug_write = 0;
 static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
 static int debug_find_count = 0;
-static int debug_find_range = 0;
 
 std::string k_date_time( int days_off = 0 ) {
 	tzset();
@@ -524,24 +523,30 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				if ( json_i.contains("voice_text") == true && json_i["voice_text"].empty() == false ) {
 					auto& l = json_i["voice_text"];
 					auto ii = m_whiteboard.begin()+info.whiteboard_voice_index;
+					if ( json_i.contains("voice_fixed") ) {
+						const int id_fixed = json_i["voice_fixed"];
+						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
+						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj);
+					}
 					for (int j=0;j<l.size();j++) {
 						const auto& x = l[j];
-						ii = std::find_if(ii,m_whiteboard.end(),[x,&info]( const auto& c ){ return ( c.num == info.num && c.id == x["id"] ? true : false ); });
-						if ( j == 0 ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),ii);
+						const int id = x["id"];
+						const bool is_final = x["final"];
+						std::string text = x["text"].get<std::string>() + ( is_final ? "" : "..." );
+						ii = std::find_if(ii,m_whiteboard.end(),[id,&info]( const auto& c ){ return ( c.num == info.num && c.id == id ? true : false ); });
 						if ( ii == m_whiteboard.end() ) {
-							m_whiteboard.push_back(whiteboard_element_t(x["text"],x["id"],info.num));
+							m_whiteboard.push_back(whiteboard_element_t(text,id,info.num));
 						}
 						else {
 							auto& c = (*ii);
 							if ( c.edit == 0 ) {
-								c.id = x["id"];
-								c.text = x["text"];
+								c.id = id;
+								c.text = text;
 								c.tobe_sent = true;
 							}
 						}
 					}
 					debug_find_count++;
-					debug_find_range = std::max(debug_find_range,static_cast<int>(m_whiteboard.size()-info.whiteboard_voice_index));
 					for (ii++;ii!=m_whiteboard.end();) { if ( (*ii).num != info.num ) { ii++; } else { ii = m_whiteboard.erase(ii); } }
 					whiteboard_updated = true;
 				}
@@ -802,7 +807,6 @@ void terminate_server() {
 	log((boost::format("debug_write_full = %d\n") % debug_write_full).str());
 	log((boost::format("debug_whiteboard_update = %d\n") % debug_whiteboard_update).str());
 	log((boost::format("debug_find_count = %d\n") % debug_find_count).str());
-	log((boost::format("debug_find_range = %d\n") % debug_find_range).str());
 	log("service stopped\n");
 }
 

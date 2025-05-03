@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-04-29</title>
+<title>てくてくノート ver 2025-05-03</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -20,7 +20,7 @@
 	</div>
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
-	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:20vh;resize:vertical;" placeholder="カーソル行を'F1'で送信、ダブルクリックで入力欄にコピーします。'ESC'で全消去。"></textarea></div>
+	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:10vh;resize:vertical;" placeholder="'F1'でカーソル行を送信。ダブルクリックで入力欄にコピー。'ESC'で全消去。"></textarea></div>
 </div>
 <div class="col col-2 taker-extra">
 	<div class="input-group m-2"><span class="input-group-text">F1</span><input type="text" id="key-1" class="form-control" value=""/></div>
@@ -42,9 +42,6 @@
 			<input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
 		</div>
 	</div>
-	<!--<div class="input-group m-2">
-		<button class="btn btn-outline-secondary" id="share-app" value="0">アプリ共有</button>
-	</div>-->
 	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
 	<div id="pi-control" class="m-2 pt-auto">
 		<a class="btn btn-outline-info" href="./pi.html" target="_blank">ラズパイ確認</a>
@@ -112,7 +109,7 @@
 		</div>
 	</div>
 	<div class="btn-group m-2">
-		<input type="text" id="taker-name" class="form-control px-1 text-center" placeholder="名札" maxlength="5" size="7" value=""/>
+		<input type="text" id="taker-name" class="form-control px-1 text-center taker-extra" placeholder="名札" maxlength="5" size="7" value=""/>
 	</div>
 	<div class="btn-group m-2 taker-extra">
 		<input class="btn-check btn-outline-secondary" type="checkbox" id="speech" /><label class="btn btn-outline-secondary text-nowrap" for="speech">しゃべる</label>
@@ -133,33 +130,6 @@
 </div>
 </div>
 
-<!--<div class="modal fade" id="token" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
-<div class="modal-dialog">
-<div class="modal-content">
-	<div class="modal-body">
-		<div class="alert alert-warning text-center">Ami Voice 用のパスワードを入力して下さい</div>
-		<input class="form-control" type="password" id="token-text"/>
-	</div>
-	<div class="modal-footer"><button type="button" class="btn btn-primary" id="token-ok">OK</button></div>
-</div>
-</div>
-</div>-->
-	
-<!--<div class="modal fade" id="share-app-dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
-<div class="modal-dialog">
-<div class="modal-content">
-	<div class="modal-body">
-		<div class="alert alert-warning text-center">共有したいアプリのURLを貼り付けて下さい</div>
-		<input class="form-control" type="text" id="share-app-url"/>
-	</div>
-	<div class="modal-footer">
-		<button type="button" class="btn btn-primary" id="share-app-ok">決定</button>
-		<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-	</div>
-</div>
-</div>
-</div>-->
-	
 <div style="display:none;">
 <input id="amivoice-authorization" type="text" />
 <input type="file" id="recognition-dic-load" />
@@ -168,7 +138,6 @@
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
 <script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
 <script src='./tools/sprintf-1.1.2/sprintf.min.js'></script>
-<!--<script type="text/javascript" src="./tools/crypto-js-4.1.1.min.js"></script>-->
 <script type="text/javascript" src="./tools/amivoice.js"></script>
 <script type="text/javascript" src="./tools/mic.js"></script>
 <script type="text/javascript">
@@ -194,8 +163,6 @@ var my_text_previous = '';
 var m_takers = [];
 var reset_timer; // 強制消去用タイマー
 var minimum_container_height = 0;
-// var shared_app_url = '';
-// var shared_app_window = null;
 
 var recognizer = null;
 var recognition_local = false;
@@ -218,43 +185,17 @@ class recognized_text {
 function html_encode(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,"&apos;").replace(/\n/g,"<br>"); }
 function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot/g,'"').replace(/&apos;/g,"'").replace(/<br>/g,"\n"); }
 
-var token = {};	// トークン一覧(AmiVoice,GoogleTranslate)
+var token = {};	// トークン一覧
 
 async function fetch_token( token_name ) {
 	try {
-		const responce = await fetch(token_name);
-		if (!responce.ok) { return false; }
-		token = await responce.json();
+		const response = await fetch(token_name);
+		if (!response.ok) { return false; }
+		token = await response.json();
 		return true;
  	}
 	catch (error) { alert('音声認識初期化エラー : '+error); return false; }
 }
-
-/*
-async function decrypt_token( service_name ) {
-	if ( service_name in token ) {
-		let key = "";
-		let x = new bootstrap.Modal($('#token').get(0),{});
-		let dialog = new Promise((resolve)=>{
-			$('#token-ok').one('click',()=>{ key = sprintf('%32s',$('#token-text').val()); x.hide(); });
-			$('#token')
-				.off('hidden.bs.modal')
-				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
-			x.show();
-		});
-		const result = await dialog;
-		if ( /^ *$/.test(key) == false ) {
-			try {
-				let user = CryptoJS.AES.decrypt(token[service_name].username,key).toString(CryptoJS.enc.Utf8);
-				let pass = CryptoJS.AES.decrypt(token[service_name].password,key).toString(CryptoJS.enc.Utf8);
-				return { username: user, password: pass };
-			}
-			catch (error) { console.log("cryptojs error"); }
-		}
-	}
-	return {};
-}
-*/
 
 function recognizer_vosk() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
@@ -271,7 +212,7 @@ function recognizer_vosk() {
 	function start_() {
 		if ( state != 0 ) return;
 		change_state(1);
-		vosk_socket = new WebSocket(vosk_url); // token["vosk"].server;
+		vosk_socket = new WebSocket(vosk_url);
 		vosk_socket.onopen = function(event){
 			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url}","vosk_model":"${token["vosk"].model}"}`);
 			mic_stream = new mic_stream_t(vosk_socket);
@@ -373,7 +314,6 @@ function recognizer_amivoice() {
 	};
 	var mic = new mic_monitor_t('#recognition-control');
 
-//	decrypt_token('amivoice').then((token)=>{ if ( 'username' in token ) { Wrp.sid = token.username; Wrp.spw = token.password; change_state(0); } });
 	Wrp.sid = token["amivoice"].username;
 	Wrp.spw = token["amivoice"].password;
 
@@ -455,8 +395,8 @@ function recognizer_default() {
 				if ( x != y.text || result.isFinal != y.final ) y.set(x,result.isFinal,j);
 				j++;
 			});
-			recognized_text_list.splice(j);
 		}
+		recognized_text_list.splice(j);
 		if ( recognition_local == true ) {
 			let s = "";
 			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
@@ -559,24 +499,26 @@ function my_split(s,min_length,max_length,lang) {
 
 function send( status ) {
 	if ( connected == true ) {
-		var responce = new Object();
-		responce.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
+		var response = new Object();
+		response.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
 		if ( status != 8 && screen_mode == 0 ) {
-			responce.text = ( taker_name.length != 0 && my_text_index == -1 ? taker_name+"）" : "" )+$('#my-text').val();
-			responce.text_index = my_text_index;
-			responce.voice_text = [];
+			response.text = ( taker_name.length != 0 && my_text_index == -1 ? taker_name+"）" : "" )+$('#my-text').val();
+			response.text_index = my_text_index;
+			response.voice_text = [];
 			if ( recognition_local == false ) {
-				recognized_text_list.forEach((c)=>{
+				for (let i=0;i<recognized_text_list.length;i++) {
+					let c = recognized_text_list[i];
 					if ( c.tobe_sent == true ) {
-						responce.voice_text.push({text:( c.text + ( c.final == true ? "" : " ..." ) ),id:c.id});
-						if ( c.final == true ) { c.tobe_sent = false; }
+						response.voice_text.push({text:c.text,id:c.id,final:c.final});
+						c.tobe_sent = false;
 					}
-				});
+				}
+				const i = recognized_text_list.findIndex((c)=>!c.final);
+				if (i>0) response.voice_fixed = recognized_text_list[i-1].id;
 			}
 		}
-//		if ( status == 3 ) responce.shared_app = shared_app_url;
-		socket.send(JSON.stringify(responce));
-//		socket.send(new Blob([JSON.stringify(responce)],{type:"application/json",}));
+		socket.send(JSON.stringify(response));
+//		socket.send(new Blob([JSON.stringify(response)],{type:"application/json",}));
 	}
 }
 
@@ -632,38 +574,38 @@ function update_table_takers() {
 	$('#table-takers > tbody').empty();
 	if ( is_small_screen() == true ) {
 		m_takers.forEach((c)=>{
-			let is_taker = ( 'text' in c ? true : false );
-			if ( c.id == id || is_taker == false ) return;
+			if ( c.id == id || 'text' in c == false ) return;
 			let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
 			 $('#table-takers > tbody').append(sprintf('<tr><td class="teku">%s</td></tr>',s));
 		});
 	}
 	else {
+		let num_ro = 0;
 		m_takers.forEach((c)=>{
-			let is_taker = ( 'text' in c ? true : false );
-			if ( c.id == id || ( screen_mode != 0 && is_taker == false ) ) return;
-			let s = ( is_taker == true ? c.text.replace(/\n/g,'<br>') : '見るだけ' );
+			if ( c.id == id ) return;
+			if ( 'text' in c == false ) { num_ro++; return; }
+			let s = c.text.replace(/\n/g,'<br>');
 			$('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,s));
 		});
+		if ( num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td colspan="2">見てるだけ %d人</td></tr>',num_ro));
 	}
-	$('td.teku').css('background-image',mk_guide());
 }
 
 async function receive(event) {
-//	var responce = JSON.parse( await event.data.text() ); // for binary
-	var responce = JSON.parse(event.data);
-	switch ( responce.type ) {
+//	var response = JSON.parse( await event.data.text() ); // for binary
+	var response = JSON.parse(event.data);
+	switch ( response.type ) {
 	case 0 :
-		id = responce.id;
-		host_select(responce.server);
+		id = response.id;
+		host_select(response.server);
 		break;
 	case 1 :
-		responce.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
-		whiteboard.splice(responce.whiteboard_size);
-		if ( responce.whiteboard_size == 0 ) { $('#whiteboard-table').empty(); }
+		response.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
+		whiteboard.splice(response.whiteboard_size);
+		if ( response.whiteboard_size == 0 ) { $('#whiteboard-table').empty(); }
 		let t = $('#whiteboard-table > tr > td');
-		t.slice(responce.whiteboard_size).text('').attr('name','-').removeClass('text-warning'); // whiteboard-table は縮小せず空白に。
-		responce.whiteboard.forEach((c)=>{
+		t.slice(response.whiteboard_size).text('').attr('name','-').removeClass('text-warning'); // whiteboard-table は縮小せず空白に。
+		response.whiteboard.forEach((c)=>{
 			let o = whiteboard[c.i];
 			let s = html_encode(translate_text(o));
 			if ( o.i < t.length ) {
@@ -674,16 +616,8 @@ async function receive(event) {
 			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',o.i,( o.edit == 1 ? 'class="text-warning"' : '' ),s)); }
 		});
 		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
-		m_takers = responce.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).concat();
+		m_takers = response.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).concat();
 		update_table_takers();
-//		if ( shared_app_url != responce.shared_app ) {
-//			if ( shared_app_window != null ) {
-//				shared_app_window.close();
-//				shared_app_window = null;
-//			}
-//			if ( responce.shared_app.length != 0 ) shared_app_window = window.open(responce.shared_app);
-//			shared_app_url = responce.shared_app;
-//		}
 		break;
 	}
 }
@@ -699,11 +633,11 @@ function append_input( s ) {
 }
 
 function mk_guide() {
-	let o = $('td.teku');
+	let o = $('#my-text');
 	let f = parseInt(o.css('font-size'));
 	let w = parseInt(o.css('width'));
 	let h = parseInt(o.css('height'));
-	let x = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w-1} ${h-1}"><line x1="${f*13}" y1="0" x2="${f*13}" y2="${h-1}" stroke="white" stroke-dasharray="4" stroke-width="1"></line></svg>`;
+	let x = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w-1} ${h-1}"><line x1="${f*24}" y1="1" x2="${f*24}" y2="${h-2}" stroke="white" stroke-dasharray="4" stroke-width="1"></line></svg>`;
 	return 'url(\'data:image/svg+xml;charset=utf8,'+encodeURIComponent(x)+'\')';
 }
 
@@ -723,6 +657,7 @@ function set_font_size( font_size ) {
 	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(font_size);
 	$('#font-size li').removeClass('text-bg-primary').filter(sprintf('[data-fs="%s"]',font_size)).addClass('text-bg-primary');
 	set_screen_mode();
+	$('#my-text').on('keyup change',function(){ $(this).css('background-image',( $(this).val().length == 0 ? '' : mk_guide() )); });
 }
 
 function set_theme(theme) {
@@ -1073,29 +1008,6 @@ fetch_token('./config.json').then((ok)=>{
 		}
 	}
 });
-
-//	$('#share-app').on('click',function(){
-//		get_app().then((ok)=>{
-//			if ( ok == true ) {
-//				shared_app_url = $('#share-app-url').val();
-//				send(3);
-//			}
-//		});
-//	});
-
-//	async function get_app() {
-//		let x = new bootstrap.Modal($('#share-app-dialog').get(0),{});
-//		let ok = false;
-//		let dialog = new Promise((resolve)=>{
-//			$('#share-app-ok').one('click',()=>{ ok=true; x.hide(); });
-//			$('#share-app-dialog')
-//				.off('hidden.bs.modal')
-//				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
-//			x.show();
-//		});
-//		const result = await dialog;
-//		return ok;
-//	}
 
 if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
 $('#pi-control').hide();
