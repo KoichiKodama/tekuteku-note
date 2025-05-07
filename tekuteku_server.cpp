@@ -59,7 +59,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-03";
+static std::string m_version = "build 2025-05-07";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -93,10 +93,10 @@ void truncate_log() {
 	if (!ifs) return;
 	if (!ofs) return;
 	std::string date_min = k_date_time(7);	// 7日以前のログを削除する
-	std::regex r(R"(^[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})");
+	std::regex r(R"(^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})");
 	std::string s;
 	while ( std::getline(ifs,s) ) {
-		if ( std::regex_match(s,r) == false ) continue;
+		if ( std::regex_search(s,r) == false ) continue;
 		if ( s.compare(0,date_min.length(),date_min) > 0 ) ofs << s << "\n";
 	}
 	ifs.close();
