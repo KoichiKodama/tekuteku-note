@@ -40,7 +40,9 @@
 	#include <boost/beast/websocket/ssl.hpp>
 #endif
 #include <boost/format.hpp>
-#include <boost/process.hpp>
+#include <boost/process/v2/popen.hpp>
+#include <boost/process/v2/environment.hpp>
+#include <boost/process/v2/start_dir.hpp>
 
 #include <json.hpp>
 #include <tray.hpp>
@@ -59,12 +61,11 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-07";
+static std::string m_version = "build 2025-05-11";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
 static std::mutex m_mutex_log;
-static int session_timeout = 21600;
 static int debug_async_accept = 0;
 static int debug_async_read = 0;
 static int debug_write = 0;
@@ -427,8 +428,12 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 	try {
 		boost::system::error_code ec;
 		p_ws->async_accept(req,yield); debug_async_accept++;
-//		p_ws->text(false);
-
+		boost::beast::websocket::stream_base::timeout opt {
+			std::chrono::seconds(5), // handshake timeout
+			boost::beast::websocket::stream_base::none(), // idle timeout
+			false 
+		};
+		p_ws->set_option(opt);
 		auto ep = boost::beast::get_lowest_layer(*p_ws).socket().remote_endpoint(ec);
 		taker_info_t info;
 		info.id = ( boost::format("%s:%d") % ep.address().to_string() % ep.port() ).str();
@@ -535,7 +540,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 						std::string text = x["text"].get<std::string>() + ( is_final ? "" : "..." );
 						ii = std::find_if(ii,m_whiteboard.end(),[id,&info]( const auto& c ){ return ( c.num == info.num && c.id == id ? true : false ); });
 						if ( ii == m_whiteboard.end() ) {
-							m_whiteboard.push_back(whiteboard_element_t(text,id,info.num));
+							ii = m_whiteboard.insert(ii,whiteboard_element_t(text,id,info.num));
 						}
 						else {
 							auto& c = (*ii);
@@ -545,9 +550,13 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 								c.tobe_sent = true;
 							}
 						}
+						ii++;
 					}
 					debug_find_count++;
-					for (ii++;ii!=m_whiteboard.end();) { if ( (*ii).num != info.num ) { ii++; } else { ii = m_whiteboard.erase(ii); } }
+					if ( json_i.contains("voice_last") ) {
+						const int id_last = json_i["voice_last"];
+						for (;ii!=m_whiteboard.end();) { if ( (*ii).num == info.num && (*ii).id > id_last ) { ii = m_whiteboard.erase(ii); } else { ii++; } }
+					}
 					whiteboard_updated = true;
 				}
 				request_broadcast.set();
@@ -619,9 +628,14 @@ public:
 			if ( jj == std::string::npos ) jj = s.size();
 		}
 	};
-	std::string args() const {
-		std::string r;
-		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r += (" "+c.first+"="+c.second); });
+//	std::string args() const {
+//		std::string r;
+//		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r += (" "+c.first+"="+c.second); });
+//		return r;
+//	};
+	std::vector<std::string> argv() const {
+		std::vector<std::string> r;
+		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r.emplace_back(c.first+"="+c.second); });
 		return r;
 	};
 	std::string env( const std::string& key ) const {
@@ -637,7 +651,6 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	boost::beast::error_code ec;
 	boost::asio::ip::tcp::socket& socket = boost::beast::get_lowest_layer(stream).socket();
 	boost::asio::ip::tcp::socket::endpoint_type ep = socket.remote_endpoint(ec);
-//	boost::beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(session_timeout));
 	#ifdef USE_SSL
     stream.async_handshake(boost::asio::ssl::stream_base::server,yield[ec]);
 	#endif
@@ -694,37 +707,29 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	res.set(boost::beast::http::field::server,m_server_name);
 	res.keep_alive(req.keep_alive());
 
-	if ( path_ex == "py" || path_ex == "sh" ) {
-		boost::beast::http::string_body::value_type body;
-		boost::process::ipstream is;
-		std::error_code ec;
-		#ifdef _WINDOWS
-		boost::process::child c("bash -c '."+path+http_query.args()+"'",boost::process::std_out>is,ec);
-		#else
-		boost::process::child c("."+path+http_query.args(),boost::process::std_out>is,ec);
-		#endif
-		c.wait();
-		if (!ec) {
-			bool end_of_header = false;
-			std::string x;
-			while ( is && std::getline(is,x) ) {
-				if ( x.back() == '\r' ) x.pop_back(); // getline は改行コードを含まない。windows での \r 削除。
-				if (end_of_header) body += (x+"\n");
-				if (x.empty()) end_of_header = true;
+	if ( path_ex == "sh" ) {
+		auto cwd = boost::process::v2::process_start_dir(std::filesystem::current_path().string());
+		boost::process::v2::popen c(yield.get_executor(),"."+path,http_query.argv(),cwd);
+		std::string x;
+		for (;;) {
+			boost::system::error_code ec;
+			std::string t;
+			boost::asio::read(c,boost::asio::dynamic_buffer(t),ec);
+			x += t;
+			if (ec) {
+				if ( ec == boost::asio::error::eof ) break;
+				log((boost::format("exec_http_session error=(%d,%s)\n") % ec.value() % ec.message()).str());
+				std::string m = (boost::format("error=(%d,%s)") % ec.value() % ec.message()).str();
+				return send(error_responce(boost::beast::http::status::internal_server_error,m)); // 500
 			}
-			auto const size = body.size();
-		boost::process::child c("."+path+http_query.args(),boost::process::std_out>is,ec);
-			res.set(boost::beast::http::field::content_type,"text/plain");
-			res.content_length(size);
-			if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
-			boost::beast::http::response<boost::beast::http::string_body> res_x{res};
-			res_x.body() = std::move(body);
-			return send(std::move(res_x));
 		}
-		else {
-			std::string m = (boost::format("error (value,category,message) = (%d,%s,%s)") % ec.value() % ec.category().name() % ec.message() ).str();
-			send(error_responce(boost::beast::http::status::internal_server_error,m)); // 500
-		}
+		x = x.substr(x.find("\n\n")+2);
+		res.set(boost::beast::http::field::content_type,"text/plain");
+		res.content_length(x.size());
+		if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
+		boost::beast::http::response<boost::beast::http::string_body> res_x{res};
+		res_x.body() = std::move(x);
+		return send(std::move(res_x));
 	}
 	else {
 		std::string file_path = "." + path;
@@ -885,6 +890,7 @@ int main( int argc, char** argv ) {
 		load_server_certificate(ctx,key,crt,chain,pwd);
 		#endif
 
+		std::vector<boost::process::v2::process> m_exec;
 		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
 		std::string tray_name = (boost::format("tekuteku-%04d") % m_port).str().c_str();
@@ -893,7 +899,11 @@ int main( int argc, char** argv ) {
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
 			return 0;
 		}
-		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) boost::process::spawn(a.get<std::string>()); }
+//		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) boost::process::spawn(a.get<std::string>()); }
+		if ( m_cfg.contains("exec") ) { for (auto& a:m_cfg["exec"]) {
+			auto exe = boost::process::v2::environment::find_executable(a.get<std::string>());
+			m_exec.emplace_back(boost::process::v2::process(ioc_r,exe,{}));
+		}}
 		#endif
 
 		m_whiteboard.reserve(4096);
@@ -945,6 +955,7 @@ int main( int argc, char** argv ) {
 		#ifdef _WINDOWS
 		wd.stop(); thread_wd.join();
 		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
+//		for (auto& proc:m_exec) { proc.terminate(); }
 		#endif
 		terminate_server();
 		return 0;

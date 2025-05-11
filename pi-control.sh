@@ -30,7 +30,7 @@ connections_wifi = []
 connections_ethernet = []
 
 def print_responce(responce):
-	print('Content-Type: text/plain\n\n')
+	print('Content-Type: text/plain\n') # 空行を入れる
 	print(json.dumps(responce,cls=connection_t_encoder))
 
 def job_status(force_rescan):

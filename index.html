@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-04</title>
+<title>てくてくノート ver 2025-05-09</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -388,28 +388,31 @@ function recognizer_default() {
 		let j=0;
 		for (let i=0;i<event.results.length;i++) {
 			let result = event.results[i];
+			if ( result[0].transcript.length == 0 ) continue;
 			let a = my_split(result[0].transcript,35,40,sprec.lang);
 			a.forEach((x)=>{
-				if ( j >= recognized_text_list.length ) recognized_text_list.push(new recognized_text(x,result.isFinal,j));
-				let y = recognized_text_list[j];
-				if ( x != y.text || result.isFinal != y.final ) y.set(x,result.isFinal,j);
+				if ( j < recognized_text_list.length ) {
+					let y = recognized_text_list[j];
+					if ( x != y.text || result.isFinal != y.final ) y.set(x,result.isFinal,j);
+				}
+				else recognized_text_list.push(new recognized_text(x,result.isFinal,j));
 				j++;
 			});
 		}
-		recognized_text_list.splice(j);
+		if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
 		if ( recognition_local == true ) {
 			let s = "";
 			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
 			$('#pre-roll').val(s);
 			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
 		}
-		else { send(0); }
+		send(0);
 	}
 	sprec.onspeechstart = function(event){ recognized_text_list = []; send(2); }
 	sprec.onspeechend = function(event){}
 	sprec.onstart = function(){ change_state(2); }
 	sprec.onend = function(){ if ( state == 2 ) { sprec.start(); } else { change_state(0); } }
-	sprec.onerror = function(event){ change_state(9); sprec.stop(); }
+	sprec.onerror = function(event){ sprec.stop(); mic.stop(); change_state(9); }
 
 	var recognizer_ = {
 		start : start_,
@@ -426,8 +429,8 @@ function recognizer_default() {
 		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
 	};
 
-	function start_() { if ( state == 0 ) { sprec.start(); } mic.start(); };
-	function stop_() { change_state(1); sprec.stop(); mic.stop(); };
+	function start_() { if ( state == 0 ) { change_state(1); sprec.start(); mic.start(); } };
+	function stop_() { if ( state == 2 ) { change_state(1); sprec.stop(); mic.stop(); } };
 	function status_(){ change_state(state); return state; };
 	function set_lang_(lang){ sprec.lang = lang; if ( state == 2 ) { sprec.stop(); } };
 	change_state(0);
@@ -514,7 +517,8 @@ function send( status ) {
 					}
 				}
 				const i = recognized_text_list.findIndex((c)=>!c.final);
-				if (i>0) response.voice_fixed = recognized_text_list[i-1].id;
+				if ( i>0 ) response.voice_fixed = recognized_text_list[i-1].id;
+				if ( recognized_text_list.length != 0 ) response.voice_last = recognized_text_list.at(-1).id;
 			}
 		}
 		socket.send(JSON.stringify(response));

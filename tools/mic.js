@@ -44,7 +44,7 @@ class mic_monitor_t {
 			this.source.disconnect();
 			this.stream.getTracks().forEach( track => track.stop() );
 			this.tooltip.dispose();
-			$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title');
+			$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title').css('background-color','rgb(0,0,0)');
 		}
 	}
 };

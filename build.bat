@@ -59,5 +59,3 @@ mt -manifest utf-8.manifest -outputresource:tekuteku_server.exe;#1
 del tekuteku_server.obj
 endlocal
 exit /b
-
-rem # libboost_context-vc141-mt-gd-x64-1_84.lib
