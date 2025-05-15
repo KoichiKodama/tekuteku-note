@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-11</title>
+<title>てくてくノート ver 2025-05-15</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -50,6 +50,7 @@
 </div>
 <div class="row">
 <div class="input-group">
+	<div class="btn-group m-2 taker"><input type="text" id="taker-name" class="form-control px-1 text-center" placeholder="名札" maxlength="5" size="7" value=""/></div>
 	<div class="btn-group m-2 taker-voice-recognition">
 		<button class="btn btn-outline-success text-nowrap" id="recognition-control" value="0" disabled>音声認識開始</button>
 		<div class="dropdown" id="recognition-engine">
@@ -107,9 +108,6 @@
 			<li class="dropdown-item" data-lang="id">Indonesian</li>
 			</ul>
 		</div>
-	</div>
-	<div class="btn-group m-2">
-		<input type="text" id="taker-name" class="form-control px-1 text-center taker-extra" placeholder="名札" maxlength="5" size="7" value=""/>
 	</div>
 	<div class="btn-group m-2 taker-extra">
 		<input class="btn-check btn-outline-secondary" type="checkbox" id="speech" /><label class="btn btn-outline-secondary text-nowrap" for="speech">しゃべる</label>
@@ -575,24 +573,16 @@ async function host_select(hosts) {
 }
 
 function update_table_takers() {
+	let f = function(i,s){ return sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',i,s); };
+	if ( is_small_screen() ) f = function(i,s){ return sprintf('<tr><td class="teku">%s</td></tr>',s); };
+	let num_ro = 0;
 	$('#table-takers > tbody').empty();
-	if ( is_small_screen() == true ) {
-		m_takers.forEach((c)=>{
-			if ( c.id == id || 'text' in c == false ) return;
-			let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
-			$('#table-takers > tbody').append(sprintf('<tr><td class="teku">%s</td></tr>',s));
-		});
-	}
-	else {
-		let num_ro = 0;
-		m_takers.forEach((c)=>{
-			if ( c.id == id ) return;
-			if ( 'text' in c == false ) { num_ro++; return; }
-			let s = c.text.replace(/\n/g,'<br>');
-			$('#table-takers > tbody').empty().append(sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',c.num,s));
-		});
-		if ( num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">見</td><td>%d人</td></tr>',num_ro));
-	}
+	m_takers.forEach((c)=>{
+		if ( c.id == id || 'text' in c == false ) return;
+		let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
+		$('#table-takers > tbody').append(f(c.num,s));
+	});
+	if ( !is_small_screen() && num_ro ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">見</td><td>%d人</td></tr>',num_ro));
 }
 
 async function receive(event) {
@@ -703,12 +693,10 @@ function set_screen_mode(mode) {
 		break;
 	}
 
-	// iphone のソフトキーボード対応のため $(window).height() ではなく window.visualViewport.heght を使う。
-	// iphone で $(...).scrollTop(val) が異様に遅くなる。
-
+	const height = window.innerHeight;
 	const minimum_whiteboard_height = 200;
 	let height_container = $('div.container-fluid').height();
-	let height_delta = Math.floor(window.visualViewport.height-height_container);
+	let height_delta = Math.floor(height-height_container);
 	let height_menu = $('div.container-fluid > div.row:last-child').height();
 	let height_whiteboard = $('#whiteboard-div').height()+height_delta;
 	if ( is_small_screen() == true ) height_whiteboard += height_menu;
@@ -719,11 +707,7 @@ function set_screen_mode(mode) {
 		height_whiteboard = minimum_whiteboard_height;
 	}
 	$('#whiteboard-div').height(height_whiteboard);
-
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
-
-	// テキスト入力欄 (#my-text) が画面下部になる様にスクロール
-	window.scroll({top:Math.max(0,$('div.container-fluid > div.row:last-child').offset().top-window.visualViewport.height),behavior:'instant'});
 }
 
 function shortcut_from_cookie() {
@@ -763,25 +747,25 @@ function shortcut_to_cookie() {
 	document.cookie = 'font-size='+encodeURI($('#font-size li').filter('.text-bg-primary').data('fs'));
 }
 
-$('#taker-name').on('change',function(){ taker_name = $(this).val(); });
+function scroll_input() {
+	// テキスト入力欄 (#my-text) が画面下部になる様にスクロール
+	window.scroll({top:$('div.container-fluid > div.row:last-child').offset().top-window.visualViewport.height,behavior:'instant'});
+}
 
 set_font_size('fs-4');
 set_theme('dark');
-set_screen_mode(0);
+set_screen_mode(0); scroll_input();
 shortcut_from_cookie();
 textarea_height = $('#my-text').height();
 
-// 画面 resize は window ではなく window.visualViewport で処理する。
-// #whiteboad-div の resize は見る必要ない。
-const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
-$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);});
-window.visualViewport.addEventListener("resize",()=>{ set_screen_mode(); });
+const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); console.log("HERE"); });
+$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
 $(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
 $('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
 $('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
-
+$('#taker-name').on('change',function(){ taker_name = $(this).val(); });
 $('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_theme($(clickEvent.target).data('theme')); } });
 $('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
 	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
@@ -850,11 +834,13 @@ $('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{
 	}
 });
 
-$('#my-text').on('input',function(event){
-	let o = $('#my-text')[0];
-	if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
-	send(0);
-});
+$('#my-text')
+	.on('focusin blur',function(event){ scroll_input(); })
+	.on('input',function(event){
+		let o = $('#my-text')[0];
+		if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
+		send(0);
+	});
 
 $('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
 	if ( event.button == 0 ) {
