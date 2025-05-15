@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-15</title>
+<title>てくてくノート ver 2025-05-16</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -664,7 +664,10 @@ function eval_minimum_container_height() {
 	if ( o !== undefined ) minimum_container_height = Math.ceil(o.getBoundingClientRect().bottom+$('div.container-fluid > div.row:last-child').height())+10;
 }
 
-function is_small_screen() { return ( $(window).width() < 768 )||( window.visualViewport.height < minimum_container_height ); }
+function is_small_screen(axis) {
+	if ( axis == 'h' ) return ( window.visualViewport.height < minimum_container_height );
+	return ( $(window).width() < 768 );
+}
 
 function set_screen_mode(mode) {
 	eval_minimum_container_height();
@@ -699,7 +702,7 @@ function set_screen_mode(mode) {
 	let height_delta = Math.floor(height-height_container);
 	let height_menu = $('div.container-fluid > div.row:last-child').height();
 	let height_whiteboard = $('#whiteboard-div').height()+height_delta;
-	if ( is_small_screen() == true ) height_whiteboard += height_menu;
+	if ( is_small_screen('h') == true ) height_whiteboard += height_menu;
 	if ( height_whiteboard < minimum_whiteboard_height ) height_whiteboard = minimum_whiteboard_height;
 	$('#whiteboard-exclude').hide();
 	if ( screen_mode == 2 && height_whiteboard > minimum_whiteboard_height ) {
@@ -759,7 +762,7 @@ shortcut_from_cookie();
 textarea_height = $('#my-text').height();
 
 const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); console.log("HERE"); });
-$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
+$('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
 $(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
@@ -824,7 +827,6 @@ $('#recognition-engine').on('hide.bs.dropdown',({clickEvent})=>{
 	set_recognition_engine(x.data('engine'));
 	$('#recognition-engine button').text(x.text());
 });
-// $('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
 $('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{
 	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 		$('#recognition-lang li.text-bg-primary').removeClass('text-bg-primary');
@@ -833,9 +835,10 @@ $('#recognition-lang').on('hide.bs.dropdown',({clickEvent})=>{
 		$('#recognition-lang button').text(x.text());
 	}
 });
+// $('#recognition-local').on('change',function(event){ recognition_local = $('#recognition-local').is(':checked'); });
 
 $('#my-text')
-	.on('focusin blur',function(event){ scroll_input(); })
+	.on('focusin blur',function(event){ window.setTimeout(scroll_input,200); })
 	.on('input',function(event){
 		let o = $('#my-text')[0];
 		if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
