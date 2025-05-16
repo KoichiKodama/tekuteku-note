@@ -761,7 +761,7 @@ set_screen_mode(0); scroll_input();
 shortcut_from_cookie();
 textarea_height = $('#my-text').height();
 
-const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); console.log("HERE"); });
+const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
 $('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
 $(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
