@@ -1,9 +1,6 @@
 var Recorder = function() {
-	// window.AudioContext()
 	window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
-	// navigator.getUserMedia()
 	navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-	// navigator.mediaDevices.getUserMedia()
 	navigator.mediaDevices = navigator.mediaDevices || ((navigator.getUserMedia) ? {
 		getUserMedia: function(c) {
 			return new Promise(
@@ -61,6 +58,23 @@ var Recorder = function() {
 	var reason_;
 	var maxRecordingTimeTimerId_;
 
+	function trim(val,valmin,valmax) {
+		if ( val < valmin ) return valmin;
+		if ( val > valmax ) return valmax;
+		return val;
+	}
+
+	function eval_audio_params(sample_rate) {
+		switch (sample_rate) {
+			case 48000: return [16000,3];
+			case 44100: return [22050,2];
+			case 22050: return [22050,1];
+			case 16000: return [16000,1];
+			case  8000: return [ 8000,1];
+		}
+		return [0,0];
+	}
+
 	// 各種変数の初期化
 	async function initialize_() {
 		// 録音関係の各種変数の初期化
@@ -86,22 +100,12 @@ var Recorder = function() {
 		audioProcessor_ = new AudioWorkletNode(audioContext_, 'audioWorkletProcessor');
 		audioProcessor_.bufferSize = 128;
 		audioProcessor_onaudioprocess_ = function(event) {
-			// <!-- for AudioWorklet
-			if (state_ === 0) {
-				return;
-			}
-			// -->
+			if ( state_ === 0 ) return; // for AudioWorklet
 			var audioData = event.data;
 			var pcmData = new Uint8Array(audioData.length * 2);
 			var pcmDataIndex = 0;
 			for (var audioDataIndex = 0; audioDataIndex < audioData.length; audioDataIndex++) {
-				var pcm = audioData[audioDataIndex] * 32768 | 0; // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
-				if (pcm > 32767) {
-					pcm = 32767;
-				} else
-				if (pcm < -32768) {
-					pcm = -32768;
-				}
+				var pcm = trim(audioData[audioDataIndex]*32768|0,-32768,32767); // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
 				pcmData[pcmDataIndex++] = (pcm     ) & 0xFF;
 				pcmData[pcmDataIndex++] = (pcm >> 8) & 0xFF;
 			}
@@ -109,51 +113,33 @@ var Recorder = function() {
 			waveDataBytes_ += pcmData.buffer.byteLength;
 			if (state_ === 3) {
 				state_ = 4;
-				audioStream_.stopTracks();
-				audioStream_ = undefined;
-				audioProvider_.disconnect();
-				audioProvider_ = undefined;
+				audioStream_.stopTracks(); audioStream_ = undefined;
+				audioProvider_.disconnect(); audioProvider_ = undefined;
 				audioProcessor_.disconnect();
 				if (recorder_.TRACE) recorder_.TRACE("INFO: stopped recording");
 			}
 		};
 		audioProcessor_onaudioprocess_recorded_ = function(event) {
-			// <!-- for AudioWorklet
-			if (state_ === 0) {
-				return;
-			}
-			// -->
+			if ( state_ === 0 ) return; // for AudioWorklet
 			var audioData = event.data;
 			var pcmDataOffset = (ima_state_ > 0) ? 1 + 16 : 1;
 			var pcmDataIndex = pcmDataOffset;
 			for (var audioDataIndex = 0; audioDataIndex < audioData.length; audioDataIndex++) {
-				var pcm = audioData[audioDataIndex] * 32768 | 0; // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
-				if (pcm > 32767) {
-					pcm = 32767;
-				} else
-				if (pcm < -32768) {
-					pcm = -32768;
-				}
+				var pcm = trim(audioData[audioDataIndex]*32768|0,-32768,32767); // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
 				pcmData_[pcmDataIndex++] = (pcm >> 8) & 0xFF;
 				pcmData_[pcmDataIndex++] = (pcm     ) & 0xFF;
 			}
 			if (recorder_.recorded) recorder_.recorded(pcmData_.subarray(pcmDataOffset, pcmDataIndex));
 			if (state_ === 3) {
 				state_ = 4;
-				audioStream_.stopTracks();
-				audioStream_ = undefined;
-				audioProvider_.disconnect();
-				audioProvider_ = undefined;
+				audioStream_.stopTracks(); audioStream_ = undefined;
+				audioProvider_.disconnect(); audioProvider_ = undefined;
 				audioProcessor_.disconnect();
 				if (recorder_.TRACE) recorder_.TRACE("INFO: stopped recording");
 			}
 		};
 		audioProcessor_onaudioprocess_downSampling_ = function(event) {
-			// <!-- for Safari and AudioWorklet
-			if (state_ === 0) {
-				return;
-			}
-			// -->
+			if ( state_ === 0 ) return; // for Safari and AudioWorklet
 			var audioData = event.data;
 			var audioDataIndex = 0;
 			while (temporaryAudioDataSamples_ < temporaryAudioData_.length) {
@@ -167,13 +153,7 @@ var Recorder = function() {
 					for (var i = 0; i <= 20; i++) {
 						pcm_float += temporaryAudioData_[temporaryAudioDataIndex + i] * coefData_[i];
 					}
-					var pcm = pcm_float * 32768 | 0; // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
-					if (pcm > 32767) {
-						pcm = 32767;
-					} else
-					if (pcm < -32768) {
-						pcm = -32768;
-					}
+					var pcm = trim(pcm_float*32768|0,-32768,32767); // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
 					pcmData[pcmDataIndex++] = (pcm     ) & 0xFF;
 					pcmData[pcmDataIndex++] = (pcm >> 8) & 0xFF;
 				}
@@ -188,22 +168,16 @@ var Recorder = function() {
 					temporaryAudioData_[temporaryAudioDataSamples_++] = audioData[audioDataIndex++];
 				}
 			}
-			if (state_ === 3) {
+			if ( state_ === 3 ) {
 				state_ = 4;
-				audioStream_.stopTracks();
-				audioStream_ = undefined;
-				audioProvider_.disconnect();
-				audioProvider_ = undefined;
+				audioStream_.stopTracks(); audioStream_ = undefined;
+				audioProvider_.disconnect(); audioProvider_ = undefined;
 				audioProcessor_.disconnect();
 				if (recorder_.TRACE) recorder_.TRACE("INFO: stopped recording");
 			}
 		};
 		audioProcessor_onaudioprocess_downSampling_recorded_ = function(event) {
-			// <!-- for Safari and AudioWorklet
-			if (state_ === 0) {
-				return;
-			}
-			// -->
+			if ( state_ === 0 ) return; // for Safari and AudioWorklet
 			var audioData = event.data;
 			var audioDataIndex = 0;
 			while (temporaryAudioDataSamples_ < temporaryAudioData_.length) {
@@ -217,13 +191,7 @@ var Recorder = function() {
 					for (var i = 0; i <= 20; i++) {
 						pcm_float += temporaryAudioData_[temporaryAudioDataIndex + i] * coefData_[i];
 					}
-					var pcm = pcm_float * 32768 | 0; // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
-					if (pcm > 32767) {
-						pcm = 32767;
-					} else
-					if (pcm < -32768) {
-						pcm = -32768;
-					}
+					var pcm = trim(pcm_float*32768|0,-32768,32767); // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
 					pcmData_[pcmDataIndex++] = (pcm >> 8) & 0xFF;
 					pcmData_[pcmDataIndex++] = (pcm     ) & 0xFF;
 				}
@@ -237,39 +205,15 @@ var Recorder = function() {
 					temporaryAudioData_[temporaryAudioDataSamples_++] = audioData[audioDataIndex++];
 				}
 			}
-			if (state_ === 3) {
+			if ( state_ === 3 ) {
 				state_ = 4;
-				audioStream_.stopTracks();
-				audioStream_ = undefined;
-				audioProvider_.disconnect();
-				audioProvider_ = undefined;
+				audioStream_.stopTracks(); audioStream_ = undefined;
+				audioProvider_.disconnect(); audioProvider_ = undefined;
 				audioProcessor_.disconnect();
 				if (recorder_.TRACE) recorder_.TRACE("INFO: stopped recording");
 			}
 		};
-		if (audioContext_.sampleRate === 48000) {
-			audioSamplesPerSec_ = 16000;
-			audioDecimatationFactor_ = 3;
-		} else
-		if (audioContext_.sampleRate === 44100) {
-			audioSamplesPerSec_ = 22050;
-			audioDecimatationFactor_ = 2;
-		} else
-		if (audioContext_.sampleRate === 22050) {
-			audioSamplesPerSec_ = 22050;
-			audioDecimatationFactor_ = 1;
-		} else
-		if (audioContext_.sampleRate === 16000) {
-			audioSamplesPerSec_ = 16000;
-			audioDecimatationFactor_ = 1;
-		} else
-		if (audioContext_.sampleRate === 8000) {
-			audioSamplesPerSec_ = 8000;
-			audioDecimatationFactor_ = 1;
-		} else {
-			audioSamplesPerSec_ = 0;
-			audioDecimatationFactor_ = 0;
-		}
+		[audioSamplesPerSec_,audioDecimatationFactor_] = eval_audio_params(audioContext_.sampleRate);
 		if (audioDecimatationFactor_ > 1) {
 			temporaryAudioData_ = new Float32Array(20 + ((audioProcessor_.bufferSize / audioDecimatationFactor_ >> 1) << 1) * audioDecimatationFactor_);
 			temporaryAudioDataSamples_ = 0;
@@ -359,31 +303,8 @@ var Recorder = function() {
 			await initialize_();
 			state_ = 0;
 		}
-		if (recorder_.downSampling) {
-			if (audioContext_.sampleRate === 48000) {
-				audioSamplesPerSec_ = 16000;
-				audioDecimatationFactor_ = 3;
-			} else
-			if (audioContext_.sampleRate === 44100) {
-				audioSamplesPerSec_ = 22050;
-				audioDecimatationFactor_ = 2;
-			} else
-			if (audioContext_.sampleRate === 22050) {
-				audioSamplesPerSec_ = 22050;
-				audioDecimatationFactor_ = 1;
-			} else
-			if (audioContext_.sampleRate === 16000) {
-				audioSamplesPerSec_ = 16000;
-				audioDecimatationFactor_ = 1;
-			} else
-			if (audioContext_.sampleRate === 8000) {
-				audioSamplesPerSec_ = 8000;
-				audioDecimatationFactor_ = 1;
-			} else {
-				audioSamplesPerSec_ = 0;
-				audioDecimatationFactor_ = 0;
-			}
-		} else {
+		if (recorder_.downSampling) { [audioSamplesPerSec_,audioDecimatationFactor_] = eval_audio_params(audioContext_.sampleRate); }
+		else {
 			audioSamplesPerSec_ = audioContext_.sampleRate;
 			audioDecimatationFactor_ = 1;
 		}
@@ -521,9 +442,7 @@ var Recorder = function() {
 	}
 
 	// 録音中かどうかの取得
-	function isActive_() {
-		return (state_ === 2);
-	}
+	function isActive_() { return (state_ === 2); }
 
 	// 録音の停止を自動的に行うためのタイマの開始
 	function startMaxRecordingTimeTimer_() {
@@ -602,19 +521,9 @@ var Recorder = function() {
 		} else {
 			ima_state_last_ += vpdiff;
 		}
-		if (ima_state_last_ > 32767) {
-			ima_state_last_ = 32767;
-		} else
-		if (ima_state_last_ < -32768) {
-			ima_state_last_ = -32768;
-		}
+		ima_state_last_ = trim(ima_state_last_,-32768,32767);
 		ima_state_step_index_ += ima_step_adjust_table_[ima & 0x07];
-		if (ima_state_step_index_ < 0) {
-			ima_state_step_index_ = 0;
-		} else
-		if (ima_state_step_index_ > 88) {
-			ima_state_step_index_ = 88;
-		}
+		ima_state_step_index_ = trim(ima_state_step_index_,0,88);
 		return ima;
 	}
 	// -->
@@ -674,11 +583,8 @@ var Result = function() {
 		try {
 			return parseJSON_(result);
 		} catch (e) {
-			if (result.indexOf("\x01") == -1) {
-				return parseTEXT_(result);
-			} else {
-				return parseRAW_(result);
-			}
+			if ( result.indexOf("\x01") == -1 ) return parseTEXT_(result);
+			return parseRAW_(result);
 		}
 	}
 
@@ -709,16 +615,10 @@ var Result = function() {
 		var i, j;
 		for (i = 0; i < fields0.length; i++) {
 			var written = fields0[i];
-			if ((j = written.indexOf(" ")) != -1) {
-				written = written.slice(0, j);
-			}
-			if ((j = written.indexOf(":")) != -1) {
-				written = written.slice(0, j);
-			}
-			if ((j = written.indexOf("\x03")) != -1) {
-				written = written.slice(0, j);
-			}
-			append_(local, written);
+			if ( (j = written.indexOf(" ")) != -1 ) { written = written.slice(0,j); }
+			if ( (j = written.indexOf(":")) != -1 ) { written = written.slice(0,j); }
+			if ( (j = written.indexOf("\x03")) != -1 ) { written = written.slice(0,j); }
+			append_(local,written);
 		}
 		return {
 			text: local.buffer,
@@ -730,71 +630,26 @@ var Result = function() {
 	}
 
 	function append_(local, item) {
-		if (item.length == 0) {
-			return;
-		}
-		if (item == "<->") {
-			return;
-		}
+		if (item.length == 0) return;
+		if (item == "<->") return;
 		var itemState = 0;
 		for (var i = 0; i < item.length; i++) {
 			var c = item.charCodeAt(i);
 			if (itemState == 0) {
-				if (c == 0x005F) {
-					break;
-				} else
-				if (c == 0x4E00 || c == 0x4E8C || c == 0x4E09 || c == 0x56DB || c == 0x4E94 || c == 0x516D || c == 0x4E03 || c == 0x516B || c == 0x4E5D) { // '一'～'九'
-					itemState = 1;
-				} else
-				if (c == 0x5341) { // '十'
-					itemState = 2;
-				} else
-				if (c == 0x767E) { // '百'
-					itemState = 4;
-				} else
-				if (c == 0x5343) { // '千'
-					itemState = 8;
-				} else {
-					break;
-				}
-			} else {
-				if (c == 0x005F) {
-					item = item.substr(0, i) + item.substr(i + 1);
-					break;
-				} else
-				if (c == 0x4E00 || c == 0x4E8C || c == 0x4E09 || c == 0x56DB || c == 0x4E94 || c == 0x516D || c == 0x4E03 || c == 0x516B || c == 0x4E5D) { // '一'～'九'
-					if ((itemState & 1) != 0) {
-						break;
-					} else {
-						itemState |= 1;
-					}
-				} else
-				if (c == 0x5341) { // '十'
-					if ((itemState & 2) != 0) {
-						break;
-					} else {
-						itemState |= 2;
-						itemState &= ~1;
-					}
-				} else
-				if (c == 0x767E) { // '百'
-					if ((itemState & 6) != 0) {
-						break;
-					} else {
-						itemState |= 4;
-						itemState &= ~1;
-					}
-				} else
-				if (c == 0x5343) { // '千'
-					if ((itemState & 14) != 0) {
-						break;
-					} else {
-						itemState |= 8;
-						itemState &= ~1;
-					}
-				} else {
-					break;
-				}
+				if (c == 0x005F) { break; }
+				else if (c == 0x4E00 || c == 0x4E8C || c == 0x4E09 || c == 0x56DB || c == 0x4E94 || c == 0x516D || c == 0x4E03 || c == 0x516B || c == 0x4E5D) { itemState = 1; } // '一'～'九' 
+				else if (c == 0x5341) { itemState = 2; } // '十'
+				else if (c == 0x767E) { itemState = 4; } // '百'
+				else if (c == 0x5343) { itemState = 8; } // '千'
+				else { break; }
+			}
+			else {
+				if (c == 0x005F) { item = item.substr(0, i) + item.substr(i + 1); break; }
+				else if (c == 0x4E00 || c == 0x4E8C || c == 0x4E09 || c == 0x56DB || c == 0x4E94 || c == 0x516D || c == 0x4E03 || c == 0x516B || c == 0x4E5D) { if ((itemState & 1) != 0) { break; } else { itemState |= 1; } } // '一'～'九'
+				else if (c == 0x5341) { if ((itemState & 2) != 0) { break; } else { itemState |= 2; itemState &= ~1; } } // '十'
+				else if (c == 0x767E) { if ((itemState & 6) != 0) { break; } else { itemState |= 4; itemState &= ~1; } } // '百'
+				else if (c == 0x5343) { if ((itemState & 14) != 0) { break; } else { itemState |= 8; itemState &= ~1; } } // '千'
+				else { break; }
 			}
 		}
 		item = item.replace(/_/g, " ");
@@ -803,139 +658,46 @@ var Result = function() {
 		if (local.bufferEnding == 0) {
 			var itemBeginning;
 			var c = itemBeginningChar;
-			if (c == 0x0020) {
-				itemBeginning = 0;
-			} else
-			if (c == 0x0021
-			 || c == 0x002C
-			 || c == 0x002E
-			 || c == 0x003A
-			 || c == 0x003B
-			 || c == 0x003F) {
-				itemBeginning = 5;
-			} else
-			if (c == 0x3001
-			 || c == 0x3002
-			 || c == 0xFF01
-			 || c == 0xFF0C
-			 || c == 0xFF0E
-			 || c == 0xFF1A
-			 || c == 0xFF1B
-			 || c == 0xFF1F) {
-				itemBeginning = 6;
-			} else {
-				itemBeginning = 7;
+			if (c == 0x0020) { itemBeginning = 0; }
+			else if (c == 0x0021 || c == 0x002C || c == 0x002E || c == 0x003A || c == 0x003B || c == 0x003F) { itemBeginning = 5; }
+			else if (c == 0x3001 || c == 0x3002 || c == 0xFF01 || c == 0xFF0C || c == 0xFF0E || c == 0xFF1A || c == 0xFF1B || c == 0xFF1F) { itemBeginning = 6; }
+			else { itemBeginning = 7; }
+			if (itemBeginning == 0 || itemBeginning == 5 || itemBeginning == 6) {
+				if (local.buffer.length > 0) { local.buffer = local.buffer.substr(0, local.buffer.length - 1); }
 			}
-			if (itemBeginning == 0
-			 || itemBeginning == 5
-			 || itemBeginning == 6) {
-				if (local.buffer.length > 0) {
-					local.buffer = local.buffer.substr(0, local.buffer.length - 1);
-				}
-			}
-		} else {
+		}
+		else {
 			var itemBeginning;
 			var c = itemBeginningChar;
 			if (c == 0x0020) {
 				itemBeginning = 0;
 			} else
-			if (c >= 0x0041 && c <= 0x005A
-			 || c >= 0x0061 && c <= 0x007A
-			 || c >= 0x0100 && c <= 0x0DFF
-			 || c >= 0x0E60 && c <= 0x01FF) {
-				itemBeginning = 1;
-			} else
-			if (c >= 0xFF21 && c <= 0xFF3A
-			 || c >= 0xFF41 && c <= 0xFF5A) {
-				itemBeginning = 2;
-			} else
-			if (c >= 0x0030 && c <= 0x0039) {
-				itemBeginning = (local.bufferEnding == 8 && itemEndingChar == 0) ? 8 : 3;
-			} else
-			if (c >= 0xFF10 && c <= 0xFF19) {
-				itemBeginning = (local.bufferEnding == 9 && itemEndingChar == 0) ? 9 : 4;
-			} else
-			if (c == 0x0021
-			 || c == 0x002C
-			 || c == 0x002E
-			 || c == 0x003A
-			 || c == 0x003B
-			 || c == 0x003F) {
-				itemBeginning = 5;
-			} else
-			if (c == 0x3001
-			 || c == 0x3002
-			 || c == 0xFF01
-			 || c == 0xFF0C
-			 || c == 0xFF0E
-			 || c == 0xFF1A
-			 || c == 0xFF1B
-			 || c == 0xFF1F) {
-				itemBeginning = 6;
-			} else {
-				itemBeginning = 7;
-			}
-			if (itemBeginning == 1 || local.bufferEnding == 1 && (itemBeginning == 2
-																									 || itemBeginning == 3
-																									 || itemBeginning == 4
-																									 || itemBeginning == 7)
-														 || local.bufferEnding == 2 && (itemBeginning == 2)
-														 || local.bufferEnding == 3 && (itemBeginning == 3
-																									 || itemBeginning == 4)
-														 || local.bufferEnding == 4 && (itemBeginning == 3
-																									 || itemBeginning == 4)
-														 || local.bufferEnding == 5 && (itemBeginning == 2
-																									 || itemBeginning == 3
-																									 || itemBeginning == 4
-																									 || itemBeginning == 7)
-														 || local.bufferEnding == 8 && (itemBeginning == 3
-																									 || itemBeginning == 4)
-														 || local.bufferEnding == 9 && (itemBeginning == 3
-																									 || itemBeginning == 4)) {
-				local.buffer += " ";
-			}
+			if ( c >= 0x0041 && c <= 0x005A || c >= 0x0061 && c <= 0x007A || c >= 0x0100 && c <= 0x0DFF || c >= 0x0E60 && c <= 0x01FF) { itemBeginning = 1; }
+			else if (c >= 0xFF21 && c <= 0xFF3A || c >= 0xFF41 && c <= 0xFF5A) { itemBeginning = 2; }
+			else if (c >= 0x0030 && c <= 0x0039) { itemBeginning = (local.bufferEnding == 8 && itemEndingChar == 0) ? 8 : 3; }
+			else if (c >= 0xFF10 && c <= 0xFF19) { itemBeginning = (local.bufferEnding == 9 && itemEndingChar == 0) ? 9 : 4; }
+			else if (c == 0x0021 || c == 0x002C || c == 0x002E || c == 0x003A || c == 0x003B || c == 0x003F) { itemBeginning = 5; }
+			else if (c == 0x3001 || c == 0x3002 || c == 0xFF01 || c == 0xFF0C || c == 0xFF0E || c == 0xFF1A || c == 0xFF1B || c == 0xFF1F) { itemBeginning = 6; }
+			else { itemBeginning = 7; }
+			if (itemBeginning == 1 || 
+				local.bufferEnding == 1 && (itemBeginning == 2 || itemBeginning == 3 || itemBeginning == 4 || itemBeginning == 7) || 
+				local.bufferEnding == 2 && (itemBeginning == 2) || 
+				local.bufferEnding == 3 && (itemBeginning == 3 || itemBeginning == 4) || 
+				local.bufferEnding == 4 && (itemBeginning == 3 || itemBeginning == 4) || 
+				local.bufferEnding == 5 && (itemBeginning == 2 || itemBeginning == 3 || itemBeginning == 4 || itemBeginning == 7) || 
+				local.bufferEnding == 8 && (itemBeginning == 3 || itemBeginning == 4) || 
+				local.bufferEnding == 9 && (itemBeginning == 3 || itemBeginning == 4)) { local.buffer += " "; }
 		}
 		local.buffer += item;
 		c = (itemEndingChar == 0) ? itemBeginningChar : itemEndingChar;
-		if (c == 0x0020) {
-			local.bufferEnding = 0;
-		} else
-		if (c >= 0x0041 && c <= 0x005A
-		 || c >= 0x0061 && c <= 0x007A
-		 || c >= 0x0100 && c <= 0x0DFF
-		 || c >= 0x0E60 && c <= 0x01FF) {
-			local.bufferEnding = 1;
-		} else
-		if (c >= 0xFF21 && c <= 0xFF3A
-		 || c >= 0xFF41 && c <= 0xFF5A) {
-			local.bufferEnding = 2;
-		} else
-		if (c >= 0x0030 && c <= 0x0039) {
-			local.bufferEnding = (itemEndingChar == 0) ? 8 : 3;
-		} else
-		if (c >= 0xFF10 && c <= 0xFF19) {
-			local.bufferEnding = (itemEndingChar == 0) ? 9 : 4;
-		} else
-		if (c == 0x0021
-		 || c == 0x002C
-		 || c == 0x002E
-		 || c == 0x003A
-		 || c == 0x003B
-		 || c == 0x003F) {
-			local.bufferEnding = 5;
-		} else
-		if (c == 0x3001
-		 || c == 0x3002
-		 || c == 0xFF01
-		 || c == 0xFF0C
-		 || c == 0xFF0E
-		 || c == 0xFF1A
-		 || c == 0xFF1B
-		 || c == 0xFF1F) {
-			local.bufferEnding = 6;
-		} else {
-			local.bufferEnding = 7;
-		}
+		if (c == 0x0020) { local.bufferEnding = 0; }
+		else if (c >= 0x0041 && c <= 0x005A || c >= 0x0061 && c <= 0x007A || c >= 0x0100 && c <= 0x0DFF || c >= 0x0E60 && c <= 0x01FF) { local.bufferEnding = 1; }
+		else if (c >= 0xFF21 && c <= 0xFF3A || c >= 0xFF41 && c <= 0xFF5A) { local.bufferEnding = 2; }
+		else if (c >= 0x0030 && c <= 0x0039) { local.bufferEnding = (itemEndingChar == 0) ? 8 : 3; }
+		else if (c >= 0xFF10 && c <= 0xFF19) { local.bufferEnding = (itemEndingChar == 0) ? 9 : 4; }
+		else if (c == 0x0021 || c == 0x002C || c == 0x002E || c == 0x003A || c == 0x003B || c == 0x003F) { local.bufferEnding = 5;}
+		else if (c == 0x3001 || c == 0x3002 || c == 0xFF01 || c == 0xFF0C || c == 0xFF0E || c == 0xFF1A || c == 0xFF1B || c == 0xFF1F) { local.bufferEnding = 6; }
+		else { local.bufferEnding = 7; }
 	}
 
 	return result_;
@@ -1362,29 +1124,13 @@ var Wrp = function() {
 				if (wrp_.utteranceStarted) wrp_.utteranceStarted(body);
 				stopCheckIntervalTimeoutTimer_();
 			}
-			else if ( tag === 'E' ) {
-				if (wrp_.utteranceEnded) wrp_.utteranceEnded(body);
-			}
-			else if ( tag === 'C' ) {
-				if (wrp_.resultCreated) wrp_.resultCreated();
-			}
-			else if ( tag === 'U' ) {
-				if (wrp_.resultUpdated) wrp_.resultUpdated(body);
-			}
-			else if ( tag === 'A' ) {
-				if (wrp_.resultFinalized) wrp_.resultFinalized(body);
-				startCheckIntervalTimeoutTimer_();
-			}
-			else if ( tag === 'R' ) {
-				if (wrp_.resultFinalized) wrp_.resultFinalized("\x01\x01\x01\x01\x01" + body);
-				startCheckIntervalTimeoutTimer_();
-			}
-			else if ( tag === 'Q' ) {
-				if (wrp_.eventNotified) wrp_.eventNotified(tag, body);
-			}
-			else if ( tag === 'G' ) {
-				if (wrp_.eventNotified) wrp_.eventNotified(tag, body);
-			}
+			else if ( tag === 'E' ) { if (wrp_.utteranceEnded) wrp_.utteranceEnded(body); }
+			else if ( tag === 'C' ) { if (wrp_.resultCreated) wrp_.resultCreated(); }
+			else if ( tag === 'U' ) { if (wrp_.resultUpdated) wrp_.resultUpdated(body); }
+			else if ( tag === 'A' ) { if (wrp_.resultFinalized) wrp_.resultFinalized(body); startCheckIntervalTimeoutTimer_(); }
+			else if ( tag === 'R' ) { if (wrp_.resultFinalized) wrp_.resultFinalized("\x01\x01\x01\x01\x01" + body); startCheckIntervalTimeoutTimer_(); }
+			else if ( tag === 'Q' ) { if (wrp_.eventNotified) wrp_.eventNotified(tag, body); }
+			else if ( tag === 'G' ) { if (wrp_.eventNotified) wrp_.eventNotified(tag, body); }
 		};
 		reason_ = null;
 		return true;

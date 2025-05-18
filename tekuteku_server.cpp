@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-11";
+static std::string m_version = "build 2025-05-17";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -112,14 +112,6 @@ bool log( const std::string& message, bool truncate = false ) {
 	if (!out) return false;
 	out << k_date_time() << " " << message;
 	return true;
-}
-
-bool spawn_client( const std::string& host_url ) {
-	#ifdef _WINDOWS
-		return ( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 ? true : false );
-	#else
-		return true;
-	#endif
 }
 
 struct address_ipv4_t {
@@ -628,11 +620,6 @@ public:
 			if ( jj == std::string::npos ) jj = s.size();
 		}
 	};
-//	std::string args() const {
-//		std::string r;
-//		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r += (" "+c.first+"="+c.second); });
-//		return r;
-//	};
 	std::vector<std::string> argv() const {
 		std::vector<std::string> r;
 		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r.emplace_back(c.first+"="+c.second); });
