@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-17";
+static std::string m_version = "build 2025-05-20";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -900,15 +900,18 @@ int main( int argc, char** argv ) {
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
 
 		thread_r = std::move(std::thread([]{
-			auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
-			#ifndef USE_SSL
-			boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),ep,std::placeholders::_1));
-			#else
-			boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),std::ref(ctx),ep,std::placeholders::_1));
-			#endif
-			boost::asio::spawn(ioc_r,std::bind(&broadcast_status,std::placeholders::_1));
-			ioc_r.run();
-			m_takers.clear();
+			try {
+				auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
+				#ifndef USE_SSL
+				boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),ep,std::placeholders::_1));
+				#else
+				boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),std::ref(ctx),ep,std::placeholders::_1));
+				#endif
+				boost::asio::spawn(ioc_r,std::bind(&broadcast_status,std::placeholders::_1));
+				ioc_r.run();
+				m_takers.clear();
+			}
+			catch ( boost::system::system_error& e ) { log((boost::format("boost exception in thread_r : %s\n") % e.what()).str()); }
 		}));
 
 //		thread_w = std::move(std::thread([]{
