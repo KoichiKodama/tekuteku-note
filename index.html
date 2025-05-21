@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-17</title>
+<title>てくてくノート ver 2025-05-21</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -578,11 +578,12 @@ function update_table_takers() {
 	let num_ro = 0;
 	$('#table-takers > tbody').empty();
 	m_takers.forEach((c)=>{
-		if ( c.id == id || 'text' in c == false ) return;
+		if ( c.id == id ) return;
+		if ( 'text' in c == false ) { num_ro++; return; }
 		let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
 		$('#table-takers > tbody').append(f(c.num,s));
 	});
-	if ( !is_small_screen() && num_ro ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">見</td><td>%d人</td></tr>',num_ro));
+	if ( !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">見</td><td>%d人</td></tr>',num_ro));
 }
 
 async function receive(event) {
