@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-20";
+static std::string m_version = "build 2025-05-22";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -888,7 +888,7 @@ int main( int argc, char** argv ) {
 		}
 //		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) boost::process::spawn(a.get<std::string>()); }
 		if ( m_cfg.contains("exec") ) { for (auto& a:m_cfg["exec"]) {
-			auto exe = boost::process::v2::environment::find_executable(a.get<std::string>());
+			std::string exe = "./"+a.get<std::string>()+".exe";
 			m_exec.emplace_back(boost::process::v2::process(ioc_r,exe,{}));
 		}}
 		#endif
