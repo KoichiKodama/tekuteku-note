@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-21</title>
+<title>てくてくノート ver 2025-05-25</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -667,7 +667,7 @@ function eval_minimum_container_height() {
 
 function is_small_screen(axis) {
 	if ( axis == 'h' ) return ( window.visualViewport.height < minimum_container_height );
-	return ( $(window).width() < 768 );
+	return ( $(window).width() < 576 );
 }
 
 function set_screen_mode(mode) {
