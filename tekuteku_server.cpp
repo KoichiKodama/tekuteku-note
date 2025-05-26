@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-22";
+static std::string m_version = "build 2025-05-25";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -214,7 +214,7 @@ struct whiteboard_element_t {
 	std::string text;
 	int num;	// taker の通番
 	int id;		// taker 毎の音声認識の行番号
-	int edit;
+	int edit;	// 音声認識結果を手編集した場合の対応用 ( 0:編集無, 1:編集中, 2:編集済 )
 	bool tobe_sent;
 };
 
@@ -536,8 +536,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 						}
 						else {
 							auto& c = (*ii);
-							if ( c.edit == 0 ) {
-								c.id = id;
+							if ( c.edit == 0 && c.text != text ) {
 								c.text = text;
 								c.tobe_sent = true;
 							}
