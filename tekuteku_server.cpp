@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-25";
+static std::string m_version = "build 2025-05-31";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -324,11 +324,12 @@ void broadcast_status( boost::asio::yield_context yield ) {
 	while (true) {
 //		if ( request_broadcast.wait() == false ) break;
 		if ( request_broadcast.wait(yield) == false ) break;
+		std::lock_guard<std::mutex> lock(m_mutex);
 
 		std::map<std::shared_ptr<websocket_stream_t>,nlohmann::json> r_json;
 		nlohmann::json j_takers;
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
+//			std::lock_guard<std::mutex> lock(m_mutex);
 
 			if ( whiteboard_updated == true ) {
 				j_whiteboard.clear();
@@ -380,7 +381,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 			boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 			boost::system::error_code ec;
 			if (( p_ws )&&( p_ws->is_open() == true )) {
-				p_ws->write(b.data(),ec); debug_write++; // boost\beast\core\detail\stream_base.hpp(116) assert in raspberry-pi4 対策
+				p_ws->async_write(b.data(),yield[ec]); debug_write++;
 				if (ec) log((boost::format("write error %s (%s)\n") % get_taker_id(p_ws) % ec.message()).str());
 			}
 			else log((boost::format("write close %s\n") % get_taker_id(p_ws)).str());
@@ -405,7 +406,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 					}
 					boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 					boost::system::error_code ec;
-					p_ws->write(b.data(),ec); debug_write++; // boost\beast\core\detail\stream_base.hpp(116) assert in raspberry-pi4 対策
+					p_ws->async_write(b.data(),yield[ec]); debug_write++;
 					if (ec) {
 						log((boost::format("write error %s (%s)\n") % info.id % ec.message()).str());
 					}
@@ -441,7 +442,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
 		boost::beast::flat_buffer b = copy_to_buffer(r.dump());
-		p_ws->write(b.data(),ec); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
+		p_ws->async_write(b.data(),yield[ec]); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			m_takers[p_ws] = info;
@@ -781,8 +782,17 @@ private:
 	OVERLAPPED o;
 	bool is_stopped;
 };
-network_watchdog wd; static std::thread thread_wd{};
+#else
+class network_watchdog {
+public:
+	network_watchdog() {};
+	~network_watchdog() {};
+	bool start() { return true; };
+	void stop() {};
+	bool wait() { std::this_thread::sleep_for(std::chrono::seconds(5)); return true; }
+};
 #endif
+network_watchdog wd; static std::thread thread_wd{};
 
 // boost::asio::io_context ioc_w(1); static std::thread thread_w{};
 // boost::asio::io_context ioc_r(1); static std::thread thread_r{};
@@ -923,6 +933,7 @@ int main( int argc, char** argv ) {
 		std::string m_host_url = (boost::format("http://localhost:%d") % m_port).str();	// Chrome でマイク使用ブロックを解除できないので localhost を使用する。
 		if (!( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",m_host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 )) throw std::runtime_error("spawn_client");
 		#endif
+		#endif
 		thread_wd = std::move(std::thread([]{
 			while ( wd.wait() ) {
 				std::vector<network_t> l;
@@ -938,7 +949,6 @@ int main( int argc, char** argv ) {
 				wd.start();
 			}
 		}));
-		#endif
 		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
 
 		#ifdef _WINDOWS

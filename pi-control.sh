@@ -24,7 +24,7 @@ class connection_t_encoder(json.JSONEncoder):
 		else:
 			return super().default(obj)
 
-wifi_dev = 'wlan0'
+wifi_dev = 'wlan1'
 known_connections = ['AUEWLAN','AUEWS','AUEWT','auewlan@sien','kodama-420','eth0','sim','sim-nttpc','kodama-home']
 connections_wifi = []
 connections_ethernet = []

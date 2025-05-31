@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-25</title>
+<title>てくてくノート ver 2025-05-31</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -195,6 +195,8 @@ async function fetch_token( token_name ) {
 	catch (error) { alert('音声認識初期化エラー : '+error); return false; }
 }
 
+function debug(msg) { console.log(msg); }
+
 function recognizer_vosk() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var vosk_socket = null;
@@ -227,10 +229,8 @@ function recognizer_vosk() {
 
 	function stop_() {
 		if ( state != 2 ) return;
-		mic.stop();
-		mic_stream.stop();
-		vosk_socket.close();
 		change_state(1);
+		vosk_socket.close();
 	};
 
 	function status_() { change_state(state); return state; };
@@ -280,10 +280,8 @@ function recognizer_yyprobe() {
 
 	function stop_() {
 		if ( state != 2 ) return;
-		mic.stop();
-		mic_stream.stop();
-		yy_socket.close();
 		change_state(1);
+		yy_socket.close();
 	};
 
 	function status_() { change_state(state); return state; };
@@ -374,6 +372,7 @@ function recognizer_amivoice() {
 }
 
 function recognizer_default() {
+	var retry_count = 0;
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 	var sprec = new SpeechRecognition();
@@ -406,11 +405,18 @@ function recognizer_default() {
 		}
 		send(0);
 	}
-	sprec.onspeechstart = function(event){ recognized_text_list = []; send(2); }
-	sprec.onspeechend = function(event){}
-	sprec.onstart = function(){ change_state(2); }
-	sprec.onend = function(){ if ( state == 2 ) { sprec.start(); } else { change_state(0); } }
-	sprec.onerror = function(event){ sprec.stop(); mic.stop(); change_state(9); }
+	sprec.onspeechstart = function(event){ debug(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; send(2); }
+	sprec.onspeechend = function(event){ debug(`speechend ${state}`); }
+	sprec.onstart = function(){ debug(`start ${state}`); change_state(2); }
+	sprec.onend = function(){
+		debug(`end ${state}`);
+		switch (state) {
+			case 2: { sprec.start(); break; }
+			case 9: { if ( retry_count == 0 ) { sprec.start(); retry_count++; break; } }
+			default: { change_state(0); break; }
+		}
+	}
+	sprec.onerror = function(event){ debug(`error ${state} ${event.error} ${event.message}`); sprec.stop(); mic.stop(); change_state(9); }
 
 	var recognizer_ = {
 		start : start_,
@@ -441,9 +447,9 @@ function recognition_control_update(state) {
 		case 1: { $('#recognition-control').prop('disabled',true).text('お待ち下さい').val(1); break; }
 		case 2: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-warning').addClass('btn-outline-success').text('音声認識停止').val(2); break; }
 		case 9: {
-			$('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').text('お待ち下さい').val(9); 
-			$('#recognition-engine').trigger('hide.bs.dropdown');
-			recognizer.start();
+			$('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').val(9); 
+//			$('#recognition-engine').trigger('hide.bs.dropdown');
+//			recognizer.start();
 			break;
 		}
 	}
@@ -583,7 +589,7 @@ function update_table_takers() {
 		let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
 		$('#table-takers > tbody').append(f(c.num,s));
 	});
-	if ( !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;">見</td><td>%d人</td></tr>',num_ro));
+	if ( !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
 }
 
 async function receive(event) {
