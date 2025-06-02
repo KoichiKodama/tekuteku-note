@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-05-31";
+static std::string m_version = "build 2025-06-02";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -106,7 +106,6 @@ void truncate_log() {
 }
 
 bool log( const std::string& message, bool truncate = false ) {
-	std::lock_guard<std::mutex> lock(m_mutex_log);
 	std::ios_base::openmode mode = ( truncate ? std::ios_base::trunc : std::ios_base::app );
 	std::ofstream out(m_logfile,mode);
 	if (!out) return false;
@@ -222,7 +221,6 @@ std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> m_takers;
 std::vector<whiteboard_element_t> m_whiteboard;
 boost::asio::ip::port_type m_port = DEFAULT_PORT;
 std::vector<network_t> m_servers;
-std::mutex m_mutex;
 int num_connected = 0;	// 延べ接続テイカー
 bool network_changed = false;
 bool whiteboard_updated = false;
@@ -285,10 +283,7 @@ public:
 	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_stop(false),m_requested(false),m_timer(ioc) {};
 	virtual ~request_broadcast_event_t() {};
 	void set() {
-		{
-			std::lock_guard<std::mutex> lock(m_mtx);
-			m_requested = true;
-		}
+		m_requested = true;
 		m_timer.cancel();
 	};
 	void stop() { m_stop = true; set(); };
@@ -297,7 +292,6 @@ public:
 		for (;;) {
 			m_timer.expires_after(boost::asio::chrono::seconds(60));
 			m_timer.async_wait(yield[ec]);
-			std::lock_guard<std::mutex> lock(m_mtx);
 			if ( m_requested == true ) { m_requested = false; break; }
 		}
 		return ( m_stop == true ? false : true );
@@ -306,7 +300,6 @@ public:
 private:
 	bool m_requested;
 	bool m_stop;
-	std::mutex m_mtx;
 	boost::asio::steady_timer m_timer;
 };
 boost::asio::io_context ioc_r(1); static std::thread thread_r{};
@@ -322,46 +315,49 @@ void broadcast_status( boost::asio::yield_context yield ) {
 	nlohmann::json j_whiteboard_full = nlohmann::json::array();
 
 	while (true) {
-//		if ( request_broadcast.wait() == false ) break;
 		if ( request_broadcast.wait(yield) == false ) break;
-		std::lock_guard<std::mutex> lock(m_mutex);
 
 		std::map<std::shared_ptr<websocket_stream_t>,nlohmann::json> r_json;
 		nlohmann::json j_takers;
-		{
-//			std::lock_guard<std::mutex> lock(m_mutex);
 
-			if ( whiteboard_updated == true ) {
-				j_whiteboard.clear();
-				j_whiteboard_full.clear();
-				for (int i=0;i<m_whiteboard.size();i++) {
-					auto& c = m_whiteboard[i];
-					nlohmann::json x;
-					x["text"] = c.text;
-					x["i"] = i;
-					x["edit"] = c.edit;
-					j_whiteboard_full.push_back(x);
-					if ( c.tobe_sent == true ) {
-						j_whiteboard.push_back(x);
-						c.tobe_sent = false;
-					}
-				}
-				whiteboard_updated = false; debug_whiteboard_update++;
-			}
-			else j_whiteboard.clear();
-
-			for (auto& e : m_takers) {
-				const taker_info_t& t = e.second;
+		if ( whiteboard_updated == true ) {
+			j_whiteboard.clear();
+			j_whiteboard_full.clear();
+			for (int i=0;i<m_whiteboard.size();i++) {
+				auto& c = m_whiteboard[i];
 				nlohmann::json x;
-				if (!t.is_readonly) x["text"] = t.text;
-				x["id"] = t.id;
-				x["num"] = t.num;
-				j_takers.push_back(x);
+				x["text"] = c.text;
+				x["i"] = i;
+				x["edit"] = c.edit;
+				j_whiteboard_full.push_back(x);
+				if ( c.tobe_sent == true ) {
+					j_whiteboard.push_back(x);
+					c.tobe_sent = false;
+				}
 			}
+			whiteboard_updated = false; debug_whiteboard_update++;
+		}
+		else j_whiteboard.clear();
 
-			for (auto& e : m_takers) {
-				std::shared_ptr<websocket_stream_t> p_ws = e.first;
-				taker_info_t& t = e.second;
+		std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> l_takers;
+		for (auto ii=m_takers.begin();ii!=m_takers.end();) {
+			std::shared_ptr<websocket_stream_t> p_ws = ii->first;
+			if ((p_ws)&&(p_ws->is_open())) { l_takers.insert(*(ii++)); } else { p_ws.reset(); ii = m_takers.erase(ii); }
+		}
+
+		for (auto& e : l_takers) {
+			const taker_info_t& t = e.second;
+			nlohmann::json x;
+			if (!t.is_readonly) x["text"] = t.text;
+			x["id"] = t.id;
+			x["num"] = t.num;
+			j_takers.push_back(x);
+		}
+
+		for (auto e : l_takers) {
+			std::shared_ptr<websocket_stream_t> p_ws = e.first;
+			taker_info_t& t = e.second;
+			if ((p_ws)&&(p_ws->is_open())) {
 				nlohmann::json x;
 				x["type"] = 1;
 				x["takers"] = j_takers;
@@ -371,16 +367,8 @@ void broadcast_status( boost::asio::yield_context yield ) {
 					t.is_init = false; debug_write_full++;
 				}
 				else x["whiteboard"] = j_whiteboard;
-				r_json[p_ws] = x;
-			}
-		}
-
-		for (auto& e : r_json) {
-			std::shared_ptr<websocket_stream_t> p_ws = e.first;
-			nlohmann::json& r = e.second;
-			boost::beast::flat_buffer b = copy_to_buffer(r.dump());
-			boost::system::error_code ec;
-			if (( p_ws )&&( p_ws->is_open() == true )) {
+				boost::beast::flat_buffer b = copy_to_buffer(x.dump());
+				boost::system::error_code ec;
 				p_ws->async_write(b.data(),yield[ec]); debug_write++;
 				if (ec) log((boost::format("write error %s (%s)\n") % get_taker_id(p_ws) % ec.message()).str());
 			}
@@ -391,7 +379,7 @@ void broadcast_status( boost::asio::yield_context yield ) {
 			network_changed = false;
 			bool rc = false;
 			std::string x = "127.0.0.1";
-			for (auto ii : m_takers) {
+			for (auto ii : l_takers) {
 				taker_info_t& info = ii.second;
 				if ( info.id.compare(0,x.size(),x) == 0 ) {
 					std::shared_ptr<websocket_stream_t> p_ws = ii.first;
@@ -421,12 +409,6 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 	try {
 		boost::system::error_code ec;
 		p_ws->async_accept(req,yield); debug_async_accept++;
-		boost::beast::websocket::stream_base::timeout opt {
-			std::chrono::seconds(5), // handshake timeout
-			boost::beast::websocket::stream_base::none(), // idle timeout
-			false 
-		};
-		p_ws->set_option(opt);
 		auto ep = boost::beast::get_lowest_layer(*p_ws).socket().remote_endpoint(ec);
 		taker_info_t info;
 		info.id = ( boost::format("%s:%d") % ep.address().to_string() % ep.port() ).str();
@@ -443,10 +425,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 		}
 		boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 		p_ws->async_write(b.data(),yield[ec]); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
-		{
-			std::lock_guard<std::mutex> lock(m_mutex);
-			m_takers[p_ws] = info;
-		}
+		m_takers[p_ws] = info;
 		request_broadcast.set();
 		log((boost::format("session start %s total=%d\n") % info.id % m_takers.size()).str());
 
@@ -471,7 +450,6 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			if ( s.empty() == false ) {
 				nlohmann::json json_i = nlohmann::json::parse(s);
 				int status = json_i["status"];
-				std::lock_guard<std::mutex> lock(m_mutex);
 				if ( status == 8 ) {
 					log((boost::format("clear whiteboard by %s\n") % info.id).str());
 					log_whiteboard();
@@ -558,10 +536,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 	}
 	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
 	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
-	if ( m_takers.find(p_ws) != m_takers.end() ) {
-		std::lock_guard<std::mutex> lock(m_mutex);
-		m_takers.erase(p_ws);
-	}
+	p_ws.reset(); if ( m_takers.find(p_ws) != m_takers.end() ) m_takers.erase(p_ws);
 	log((boost::format("session terminated total=%d\n") % m_takers.size()).str());
 	request_broadcast.set();
 }
@@ -670,6 +645,12 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 			if ( query != ("?magic="+m_magic) ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
 		}
 		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
+		boost::beast::websocket::stream_base::timeout opt {
+			std::chrono::seconds(5), // handshake timeout
+			boost::beast::websocket::stream_base::none(), // idle timeout
+			false 
+		};
+		p_ws->set_option(opt);
 		boost::asio::spawn(boost::beast::get_lowest_layer(*p_ws).socket().get_executor(),std::bind(&exec_websocket_session,p_ws,req,std::placeholders::_1));
 		return;
 	}
@@ -794,12 +775,8 @@ public:
 #endif
 network_watchdog wd; static std::thread thread_wd{};
 
-// boost::asio::io_context ioc_w(1); static std::thread thread_w{};
-// boost::asio::io_context ioc_r(1); static std::thread thread_r{};
-
 void terminate_server() {
 	request_broadcast.stop();
-//	ioc_w.stop(); thread_w.join();
 	ioc_r.stop(); thread_r.join();
 	if (true) log_whiteboard();
 	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
@@ -922,11 +899,6 @@ int main( int argc, char** argv ) {
 			}
 			catch ( boost::system::system_error& e ) { log((boost::format("boost exception in thread_r : %s\n") % e.what()).str()); }
 		}));
-
-//		thread_w = std::move(std::thread([]{
-//			boost::asio::spawn(ioc_w,std::bind(&broadcast_status,std::placeholders::_1));
-//			ioc_w.run();
-//		}));
 
 		#ifdef _WINDOWS
 		#ifndef USE_SSL

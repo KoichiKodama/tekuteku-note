@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-05-31</title>
+<title>てくてくノート ver 2025-06-02</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -219,17 +219,18 @@ function recognizer_vosk() {
 			mic_stream.start();
 			mic.start();
 		};
-		vosk_socket.onclose = function(event){ mic.stop(); mic_stream.stop(); change_state(0); };
-		vosk_socket.onerror = function(event){ mic.stop(); mic_stream.stop(); change_state(9); };
+		vosk_socket.onclose = function(event){ change_state(0); };
+		vosk_socket.onerror = function(event){ stop_(); change_state(9); };
 		vosk_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
-			if ( rc.code == "ok" ) { change_state(2); } else { mic.stop(); mic_stream.stop(); change_state(9); }
+			if ( rc.code == "ok" ) { change_state(2); } else { stop_(); change_state(9); }
 		};
 	};
 
 	function stop_() {
-		if ( state != 2 ) return;
 		change_state(1);
+		mic.stop();
+		mic_stream.stop(); 
 		vosk_socket.close();
 	};
 
@@ -270,17 +271,18 @@ function recognizer_yyprobe() {
 			mic_stream.start();
 			mic.start();
 		};
-		yy_socket.onclose = function(event){ mic.stop(); mic_stream.stop(); change_state(0); };
-		yy_socket.onerror = function(event){ mic.stop(); mic_stream.stop(); change_state(9); };
+		yy_socket.onclose = function(event){ change_state(0); };
+		yy_socket.onerror = function(event){ stop_(); change_state(9); };
 		yy_socket.onmessage = function(event) {
 			let rc = JSON.parse(event.data);
-			if ( rc.code == "ok" ) { change_state(2); } else { mic.stop(); mic_stream.stop(); change_state(9); }
+			if ( rc.code == "ok" ) { change_state(2); } else { stop_(); change_state(9); }
 		};
 	};
 
 	function stop_() {
-		if ( state != 2 ) return;
 		change_state(1);
+		mic.stop();
+		mic_stream.stop(); 
 		yy_socket.close();
 	};
 
@@ -538,13 +540,14 @@ function socket_open(url) {
 	socket = new WebSocket(url);
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
 	socket.onopen = function(event){ connected = true; send(9); };
-	socket.onclose = function(event){ socket_close(); };
-	socket.onerror = function(event){} // iphone で background 移行数秒後に発生する。
+	socket.onclose = function(event){ socket_close(); debug(`tekuteku-socket close ${event.code} ${event.reason}`); };
+	socket.onerror = function(event){ debug(`tekuteku-socket error`); debug(event); } // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
 	window.clearTimeout(reset_timer);
 }
 
 function socket_close() {
+	debug('socket_close()');
 	socket.close();
 	socket = undefined;
 	$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
