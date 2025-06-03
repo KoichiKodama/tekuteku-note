@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-02";
+static std::string m_version = "build 2025-06-03";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -280,7 +280,7 @@ request_broadcast_event_t request_broadcast{};
 
 class request_broadcast_event_t {
 public:
-	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_stop(false),m_requested(false),m_timer(ioc) {};
+	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_stop(false),m_requested(false),m_timer(ioc) {}
 	virtual ~request_broadcast_event_t() {};
 	void set() {
 		m_requested = true;
@@ -290,9 +290,9 @@ public:
 	bool wait( boost::asio::yield_context yield ) {
 		boost::system::error_code ec;
 		for (;;) {
+			if ( m_requested == true ) { m_requested = false; break; }
 			m_timer.expires_after(boost::asio::chrono::seconds(60));
 			m_timer.async_wait(yield[ec]);
-			if ( m_requested == true ) { m_requested = false; break; }
 		}
 		return ( m_stop == true ? false : true );
 	};
@@ -317,9 +317,6 @@ void broadcast_status( boost::asio::yield_context yield ) {
 	while (true) {
 		if ( request_broadcast.wait(yield) == false ) break;
 
-		std::map<std::shared_ptr<websocket_stream_t>,nlohmann::json> r_json;
-		nlohmann::json j_takers;
-
 		if ( whiteboard_updated == true ) {
 			j_whiteboard.clear();
 			j_whiteboard_full.clear();
@@ -340,6 +337,8 @@ void broadcast_status( boost::asio::yield_context yield ) {
 		else j_whiteboard.clear();
 
 		std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> l_takers;
+		nlohmann::json j_takers;
+
 		for (auto ii=m_takers.begin();ii!=m_takers.end();) {
 			std::shared_ptr<websocket_stream_t> p_ws = ii->first;
 			if ((p_ws)&&(p_ws->is_open())) { l_takers.insert(*(ii++)); } else { p_ws.reset(); ii = m_takers.erase(ii); }
@@ -413,6 +412,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 		taker_info_t info;
 		info.id = ( boost::format("%s:%d") % ep.address().to_string() % ep.port() ).str();
 		info.num = num_connected++;
+		info.is_init = true;
 
 		nlohmann::json r;
 		r["type"] = 0;

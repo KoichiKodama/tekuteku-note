@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-02</title>
+<title>てくてくノート ver 2025-06-03</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -340,7 +340,7 @@ function recognizer_amivoice() {
 			$('#pre-roll').val(s);
 			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
 		}
-		else { send(0); }
+		else { socket_send(0); }
 	};
 	function change_state(i) {
 		state = i;
@@ -359,7 +359,7 @@ function recognizer_amivoice() {
 	Wrp.utteranceEnded = function(time){};
 	Wrp.issueStarted = function(){ change_state(1); };
 	Wrp.issueEnded = function(){ Wrp.feedDataResume(); };
-	Wrp.resultCreated = function(){ recognized_text_list = []; send(2); };
+	Wrp.resultCreated = function(){ recognized_text_list = []; socket_send(2); };
 	Wrp.resultUpdated = function(result){ update_result(result,false); };
 	Wrp.resultFinalized = function(result){ update_result(result,true); };
 	Wrp.eventNotified = function(event_id,event_message){};
@@ -405,9 +405,9 @@ function recognizer_default() {
 			$('#pre-roll').val(s);
 			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
 		}
-		send(0);
+		socket_send(0);
 	}
-	sprec.onspeechstart = function(event){ debug(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; send(2); }
+	sprec.onspeechstart = function(event){ debug(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; socket_send(2); }
 	sprec.onspeechend = function(event){ debug(`speechend ${state}`); }
 	sprec.onstart = function(){ debug(`start ${state}`); change_state(2); }
 	sprec.onend = function(){
@@ -506,7 +506,7 @@ function my_split(s,min_length,max_length,lang) {
 	return b;
 }
 
-function send( status ) {
+function socket_send( status ) {
 	if ( connected == true ) {
 		var response = new Object();
 		response.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
@@ -539,8 +539,8 @@ function socket_open(url) {
 	if ( connected == true ) { socket_close(); }
 	socket = new WebSocket(url);
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
-	socket.onopen = function(event){ connected = true; send(9); };
-	socket.onclose = function(event){ socket_close(); debug(`tekuteku-socket close ${event.code} ${event.reason}`); };
+	socket.onopen = function(event){ connected = true; socket_send(0); };
+	socket.onclose = function(event){ debug(`tekuteku-socket close ${event.code} ${event.reason}`); };
 	socket.onerror = function(event){ debug(`tekuteku-socket error`); debug(event); } // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
 	window.clearTimeout(reset_timer);
@@ -592,7 +592,7 @@ function update_table_takers() {
 		let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
 		$('#table-takers > tbody').append(f(c.num,s));
 	});
-	if ( !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
+	if ( screen_mode == 0 && !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
 }
 
 async function receive(event) {
@@ -767,7 +767,7 @@ function scroll_input() {
 
 set_font_size('fs-4');
 set_theme('dark');
-set_screen_mode(0); scroll_input();
+set_screen_mode(0);
 shortcut_from_cookie();
 textarea_height = $('#my-text').height();
 
@@ -777,13 +777,13 @@ $(window).on("load orientationchange",()=>{ set_screen_mode(); });
 $(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
 $('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
-$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { send(8); } });
+$('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { socket_send(8); } });
 $('#taker-name').on('change',function(){ taker_name = $(this).val(); });
 $('#screen-theme').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_theme($(clickEvent.target).data('theme')); } });
 $('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
 	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 		set_screen_mode(parseInt($(clickEvent.target).data('mode')));
-		send(0);
+		socket_send(0);
 	}
 });
 $('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_font_size($(clickEvent.target).data('fs')); } });
@@ -852,14 +852,14 @@ $('#my-text')
 	.on('input',function(event){
 		let o = $('#my-text')[0];
 		if ( o.scrollHeight > o.clientHeight ) { $(o).height(textarea_height*Math.trunc(o.scrollHeight/textarea_height)); }
-		send(0);
+		socket_send(0);
 	});
 
 $('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
 	if ( event.button == 0 ) {
 		if ( my_text_index != -1 ) {
 			$('#my-text').val(my_text_previous);
-			send(1);
+			socket_send(1);
 			my_text_previous = '';
 			$('#my-text').val('').height(textarea_height);
 		}
@@ -880,7 +880,7 @@ $(document).on('keydown',function(event){
 		switch ( event.key ) {
 		case 'F1' :
 			event.preventDefault();
-			$('#my-text').val(get_current_line()); send(1); $('#my-text').val('');
+			$('#my-text').val(get_current_line()); socket_send(1); $('#my-text').val('');
 			break;
 		case 'Escape' :
 			event.preventDefault();
@@ -897,7 +897,7 @@ $(document).on('keydown',function(event){
 			}
 			else {
 				event.preventDefault();
-				send(1);
+				socket_send(1);
 				if ( $('#speech').is(':checked') == true ) {
 					const uttr = new SpeechSynthesisUtterance()
 					uttr.text = $('#my-text').val();
@@ -912,7 +912,7 @@ $(document).on('keydown',function(event){
 			event.preventDefault();
 			if ( my_text_index != -1 ) {
 				$('#my-text').val(my_text_previous);
-				send(1);
+				socket_send(1);
 				my_text_previous = '';
 			}
 			$('#my-text').val('').height(textarea_height);
@@ -1031,7 +1031,7 @@ switch (location.protocol) {
 		$('#clear').parent().hide();
 		break;
 }
-if ( tekuteku_url.length != 0 ) socket_open(tekuteku_url);
+if ( tekuteku_url.length != 0 ) { socket_open(tekuteku_url); }
 
 </script>
 </body>
