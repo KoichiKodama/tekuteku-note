@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-03</title>
+<title>てくてくノート ver 2025-06-05</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -214,10 +214,10 @@ function recognizer_vosk() {
 		change_state(1);
 		vosk_socket = new WebSocket(vosk_url);
 		vosk_socket.onopen = function(event){
-			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url}","vosk_model":"${token["vosk"].model}"}`);
 			mic_stream = new mic_stream_t(vosk_socket);
-			mic_stream.start();
-			mic.start();
+			Promise.all([mic_stream.start(),mic.start()]).then(()=>{
+				vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url}","vosk_model":"${token["vosk"].model}"}`);
+			});
 		};
 		vosk_socket.onclose = function(event){ change_state(0); };
 		vosk_socket.onerror = function(event){ stop_(); change_state(9); };
@@ -266,10 +266,10 @@ function recognizer_yyprobe() {
 		change_state(1);
 		yy_socket = new WebSocket(yy_url);
 		yy_socket.onopen = function(event){
-			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"${tekuteku_url}"}`);
 			mic_stream = new mic_stream_t(yy_socket);
-			mic_stream.start();
-			mic.start();
+			Promise.all([mic_stream.start(),mic.start()]).then(()=>{
+				yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"${tekuteku_url}"}`);
+			});
 		};
 		yy_socket.onclose = function(event){ change_state(0); };
 		yy_socket.onerror = function(event){ stop_(); change_state(9); };
@@ -280,6 +280,7 @@ function recognizer_yyprobe() {
 	};
 
 	function stop_() {
+		if ( state != 2 ) return;
 		change_state(1);
 		mic.stop();
 		mic_stream.stop(); 

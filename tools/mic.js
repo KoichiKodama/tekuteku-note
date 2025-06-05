@@ -13,6 +13,7 @@ class mic_monitor_t {
 		this.ui_element = s;
 		this.timer = 0;
 	}
+
 	async init() {
 		this.context = new AudioContext();
 		this.analyzer = this.context.createAnalyser();
@@ -24,19 +25,20 @@ class mic_monitor_t {
 		const l = await navigator.mediaDevices.enumerateDevices();
 		l.filter((device)=>( device.kind == 'audioinput' && device.deviceId == device_id )).forEach((device)=>{ this.label = device.label; });
 	}
-	start() {
-		this.init().then(()=>{
-			if ( this.context.state === 'suspended' ) { this.context.resume(); }
-			this.timer = setInterval(()=>{
-				this.analyzer.getByteTimeDomainData(this.data);
-				const d = Array.from(this.data);
-				const pk = Math.min(255,4*d.reduce((acc,c)=>Math.max(acc,Math.abs(c-128)),0));
-				$(this.ui_element).css('background-color','rgb(0,'+pk+',0)');
-			},100);
-			$(this.ui_element).attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label});
-			this.tooltip = new bootstrap.Tooltip($(this.ui_element)[0],{trigger:'hover'});
-		});
+
+	async start() {
+		await this.init();
+		if ( this.context.state === 'suspended' ) { this.context.resume(); }
+		this.timer = setInterval(()=>{
+			this.analyzer.getByteTimeDomainData(this.data);
+			const d = Array.from(this.data);
+			const pk = Math.min(255,4*d.reduce((acc,c)=>Math.max(acc,Math.abs(c-128)),0));
+			$(this.ui_element).css('background-color','rgb(0,'+pk+',0)');
+		},100);
+		$(this.ui_element).attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label});
+		this.tooltip = new bootstrap.Tooltip($(this.ui_element)[0],{trigger:'hover'});
 	}
+
 	stop() {
 		if ( this.timer > 0 ) {
 			clearInterval(this.timer);
@@ -44,7 +46,7 @@ class mic_monitor_t {
 			this.source.disconnect();
 			this.stream.getTracks().forEach( track => track.stop() );
 			this.tooltip.dispose();
-			setTimeout(()=>$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title').css('background-color','rgb(0,0,0)'),1000);
+			$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title').css('background-color','rgb(0,0,0)');
 		}
 	}
 };
@@ -67,7 +69,7 @@ class mic_stream_t {
 	constructor(socket) { this.socket = socket; }
 
 	async open() {
-		let mic_spec = {
+		const mic_spec = {
 			video:false, 
 			audio:{
 				channelCount: this.config.channels,
@@ -83,19 +85,14 @@ class mic_stream_t {
 		this.source = this.context.createMediaStreamSource(this.stream);
 		await this.context.audioWorklet.addModule("./tools/mic-processor.js");
 		this.worklet = new AudioWorkletNode(this.context,"mic-processor",{processorOptions:{chunk_size: this.config.chunk_size},});
-		this.worklet.port.onmessage = (e)=>{
-			if ( e.data.eventType === "data" ) {
-				this.socket.send(e.data.audioBuffer);
-			}
-		};
+		this.worklet.port.onmessage = (e)=>{ if ( e.data.eventType === "data" && this.socket.readyState == 1 ) this.socket.send(e.data.audioBuffer); };
 		this.source.connect(this.worklet);
 		this.worklet.connect(this.context.destination);
 	};
 
-	start() {
-		this.open().then(()=>{
-			if ( this.context.state === 'suspended' ) this.context.resume();
-		});
+	async start() {
+		await this.open();
+		if ( this.context.state === 'suspended' ) this.context.resume();
 	};
 
 	stop() {
