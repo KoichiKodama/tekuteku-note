@@ -59,12 +59,12 @@ class mic_stream_t {
 		chunk_size: 16000 
 	};
 
-	debug = true;
 	socket;
 	stream;
 	context;
 	source;
 	worklet;
+	worklet_resolve;
 
 	constructor(socket) { this.socket = socket; }
 
@@ -85,7 +85,18 @@ class mic_stream_t {
 		this.source = this.context.createMediaStreamSource(this.stream);
 		await this.context.audioWorklet.addModule("./tools/mic-processor.js");
 		this.worklet = new AudioWorkletNode(this.context,"mic-processor",{processorOptions:{chunk_size: this.config.chunk_size},});
-		this.worklet.port.onmessage = (e)=>{ if ( e.data.eventType === "data" && this.socket.readyState == 1 ) this.socket.send(e.data.audioBuffer); };
+		this.worklet.port.onmessage = (e)=>{
+			if ( this.socket.readyState != 1 || e.data.eventType !== "data" ) return;
+			if ( this.worklet_resolve ) {
+				this.socket.send(new Int8Array(1)); // 終了通知
+				if ( this.context.state === 'running' ) this.context.suspend();
+				this.stream.getTracks().forEach((track)=>track.stop());
+				this.source.disconnect();
+				this.worklet.disconnect();
+				this.worklet_resolve();
+			}
+			else this.socket.send(e.data.audioBuffer);
+		};
 		this.source.connect(this.worklet);
 		this.worklet.connect(this.context.destination);
 	};
@@ -96,10 +107,9 @@ class mic_stream_t {
 	};
 
 	stop() {
-		if ( this.context.state === 'running' ) this.context.suspend();
-		this.stream.getTracks().forEach((track)=>track.stop());
-		this.source.disconnect();
-		this.worklet.disconnect();
+		let o = Promise.withResolvers();
+		this.worklet_resolve = o.resolve;
+		return o.promise;
 	};
 };
 
