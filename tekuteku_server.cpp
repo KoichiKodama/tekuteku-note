@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-03";
+static std::string m_version = "build 2025-06-08";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -536,7 +536,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 	}
 	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
 	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
-	p_ws.reset(); if ( m_takers.find(p_ws) != m_takers.end() ) m_takers.erase(p_ws);
+	m_takers.erase(p_ws); p_ws.reset();
 	log((boost::format("session terminated total=%d\n") % m_takers.size()).str());
 	request_broadcast.set();
 }
@@ -645,11 +645,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 			if ( query != ("?magic="+m_magic) ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
 		}
 		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
-		boost::beast::websocket::stream_base::timeout opt {
-			std::chrono::seconds(5), // handshake timeout
-			boost::beast::websocket::stream_base::none(), // idle timeout
-			false 
-		};
+		boost::beast::websocket::stream_base::timeout opt {std::chrono::seconds(5),std::chrono::seconds(30),true};
 		p_ws->set_option(opt);
 		boost::asio::spawn(boost::beast::get_lowest_layer(*p_ws).socket().get_executor(),std::bind(&exec_websocket_session,p_ws,req,std::placeholders::_1));
 		return;

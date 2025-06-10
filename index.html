@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-07</title>
+<title>てくてくノート ver 2025-06-08</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -151,7 +151,7 @@ var textarea_height = 0;
 var translate_text = function(c){ return c.text; }
 
 var socket;
-var connected = false;
+var keep_alive = false;
 var host = "";
 var id;	// 自分自身の識別子
 var dialog;
@@ -226,7 +226,7 @@ function recognizer_vosk() {
 			switch (rc.code) {
 				case "start": change_state(2); break;
 				case "stop": vosk_socket.close(); break;
-				default: stop_(); change_state(9); vosk_socket.close(); break;
+				case "error": stop_(); change_state(9); vosk_socket.close(); break;
 			}
 		};
 	};
@@ -281,7 +281,7 @@ function recognizer_yyprobe() {
 			switch (rc.code) {
 				case "start": change_state(2); break;
 				case "stop": yy_socket.close(); break;
-				default: stop_(); change_state(9); yy_socket.close(); break;
+				case "error": stop_(); change_state(9); yy_socket.close(); break;
 			}
 		};
 	};
@@ -514,7 +514,7 @@ function my_split(s,min_length,max_length,lang) {
 }
 
 function socket_send( status ) {
-	if ( connected == true ) {
+	if ( socket?.readyState === 1 ) {
 		var response = new Object();
 		response.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
 		if ( status != 8 && screen_mode == 0 ) {
@@ -536,6 +536,7 @@ function socket_send( status ) {
 		}
 		socket.send(JSON.stringify(response));
 //		socket.send(new Blob([JSON.stringify(response)],{type:"application/json",}));
+		keep_alive = true;
 	}
 }
 
@@ -543,23 +544,18 @@ const k_success = 'text-success-emphasis bg-success-subtle border border-success
 const k_warning = 'text-warning-emphasis bg-warning-subtle border border-warning-subtle';
 
 function socket_open(url) {
-	if ( connected == true ) { socket_close(); }
+	if (socket) { socket.close(); }
 	socket = new WebSocket(url);
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
-	socket.onopen = function(event){ connected = true; socket_send(0); };
-	socket.onclose = function(event){ debug(`tekuteku-socket close ${event.code} ${event.reason}`); };
+	socket.onopen = function(event){ socket_send(0); };
+	socket.onclose = function(event){
+		debug(`tekuteku-socket close ${event.code} ${event.reason}`);
+		$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
+		reset_timer = setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
+	};
 	socket.onerror = function(event){ debug(`tekuteku-socket error`); debug(event); } // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
-	window.clearTimeout(reset_timer);
-}
-
-function socket_close() {
-	debug('socket_close()');
-	socket.close();
-	socket = undefined;
-	$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
-	connected = false;
-	reset_timer = window.setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
+	clearTimeout(reset_timer);
 }
 
 async function host_select(hosts) {
@@ -630,6 +626,7 @@ async function receive(event) {
 		m_takers = response.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).concat();
 		update_table_takers();
 		break;
+	default : console.log(`unexpected response.type = ${response.type}`);
 	}
 }
 
@@ -781,7 +778,7 @@ textarea_height = $('#my-text').height();
 const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
 $('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
-$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket_close(); });
+$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket?.close(); });
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
 $('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
 $('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { socket_send(8); } });
