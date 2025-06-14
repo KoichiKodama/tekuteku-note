@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-08";
+static std::string m_version = "build 2025-06-14";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -249,61 +249,34 @@ boost::beast::flat_buffer copy_to_buffer( const std::string& s ) {
 	return b;
 }
 
-/*
 class request_broadcast_event_t {
 public:
-	request_broadcast_event_t() : m_requested(false),m_stop(false) {};
+	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_count(0),m_stop(false),m_timer(ioc) {}
 	virtual ~request_broadcast_event_t() {};
 	void set() {
-		{
-			std::lock_guard<std::mutex> lock(m_mtx);
-			m_requested = true;
-		}
-		m_cv.notify_all();
-	};
-	void stop() { m_stop = true; set(); };
-	bool wait() {
-		std::unique_lock<std::mutex> lock(m_mtx);
-		m_cv.wait(lock,[this]{ return m_requested; });
-		m_requested = false;
-		return ( m_stop == true ? false : true );
-	};
-	bool is_stopped() const { return m_stop; };
-private:
-	bool m_requested;
-	bool m_stop;
-	std::mutex m_mtx;
-	std::condition_variable m_cv;
-};
-request_broadcast_event_t request_broadcast{};
-*/
-
-class request_broadcast_event_t {
-public:
-	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_stop(false),m_requested(false),m_timer(ioc) {}
-	virtual ~request_broadcast_event_t() {};
-	void set() {
-		m_requested = true;
+		m_count++;
 		m_timer.cancel();
 	};
 	void stop() { m_stop = true; set(); };
 	bool wait( boost::asio::yield_context yield ) {
 		boost::system::error_code ec;
 		for (;;) {
-			if ( m_requested == true ) { m_requested = false; break; }
+			if ( m_count != 0 ) { m_count = 0; break; }
 			m_timer.expires_after(boost::asio::chrono::seconds(60));
 			m_timer.async_wait(yield[ec]);
 		}
 		return ( m_stop == true ? false : true );
 	};
 	bool is_stopped() const { return m_stop; };
+	int count() const { return m_count; };
 private:
-	bool m_requested;
+	int m_count;
 	bool m_stop;
 	boost::asio::steady_timer m_timer;
 };
-boost::asio::io_context ioc_r(1); static std::thread thread_r{};
-request_broadcast_event_t request_broadcast{ioc_r};
+boost::asio::io_context ioc_x(6);
+static std::thread thread_x{};
+request_broadcast_event_t request_broadcast{ioc_x};
 
 const std::string get_taker_id( const std::shared_ptr<websocket_stream_t>& p_ws ) {
 	if ( m_takers.find(p_ws) == m_takers.end() ) return "erased-socket";
@@ -773,7 +746,7 @@ network_watchdog wd; static std::thread thread_wd{};
 
 void terminate_server() {
 	request_broadcast.stop();
-	ioc_r.stop(); thread_r.join();
+	ioc_x.stop(); thread_x.join();
 	if (true) log_whiteboard();
 	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
 	log((boost::format("debug_async_read = %d\n") % debug_async_read).str());
@@ -871,7 +844,7 @@ int main( int argc, char** argv ) {
 //		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) boost::process::spawn(a.get<std::string>()); }
 		if ( m_cfg.contains("exec") ) { for (auto& a:m_cfg["exec"]) {
 			std::string exe = "./"+a.get<std::string>()+".exe";
-			m_exec.emplace_back(boost::process::v2::process(ioc_r,exe,{}));
+			m_exec.emplace_back(boost::process::v2::process(ioc_x,exe,{}));
 		}}
 		#endif
 
@@ -881,19 +854,19 @@ int main( int argc, char** argv ) {
 		if ( m_servers.empty() ) log("no network\n");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
 
-		thread_r = std::move(std::thread([]{
+		thread_x = std::move(std::thread([]{
 			try {
 				auto const ep = boost::asio::ip::tcp::endpoint{boost::asio::ip::make_address("0.0.0.0"),m_port};
 				#ifndef USE_SSL
-				boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),ep,std::placeholders::_1));
+				boost::asio::spawn(ioc_x,std::bind(&exec_listen,std::ref(ioc_x),ep,std::placeholders::_1));
 				#else
-				boost::asio::spawn(ioc_r,std::bind(&exec_listen,std::ref(ioc_r),std::ref(ctx),ep,std::placeholders::_1));
+				boost::asio::spawn(ioc_x,std::bind(&exec_listen,std::ref(ioc_x),std::ref(ctx),ep,std::placeholders::_1));
 				#endif
-				boost::asio::spawn(ioc_r,std::bind(&broadcast_status,std::placeholders::_1));
-				ioc_r.run();
+				boost::asio::spawn(ioc_x,std::bind(&broadcast_status,std::placeholders::_1));
+				ioc_x.run();
 				m_takers.clear();
 			}
-			catch ( boost::system::system_error& e ) { log((boost::format("boost exception in thread_r : %s\n") % e.what()).str()); }
+			catch ( boost::system::system_error& e ) { log((boost::format("boost exception in thread_x : %s\n") % e.what()).str()); }
 		}));
 
 		#ifdef _WINDOWS
