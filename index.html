@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-08</title>
+<title>てくてくノート ver 2025-06-14</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -425,7 +425,7 @@ function recognizer_default() {
 			default: { change_state(0); break; }
 		}
 	}
-	sprec.onerror = function(event){ debug(`error ${state} ${event.error} ${event.message}`); sprec.stop(); mic.stop(); change_state(9); }
+	sprec.onerror = function(event){ debug(`error ${state} ${event.error}`); sprec.stop(); if ( event.error != "no-speech" ) { mic.stop(); change_state(9); } }
 
 	var recognizer_ = {
 		start : start_,

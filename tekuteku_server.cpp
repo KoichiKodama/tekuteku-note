@@ -233,20 +233,24 @@ std::vector<std::string> split( const std::string& x ) {
 	return l;
 }
 
-void log_whiteboard() {
-	log((boost::format("==== whiteboard (%d) ====\n") % m_whiteboard.size()).str());
-	std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[]( const auto& c ){
-		const std::vector<std::string> l = split(c.text);
-		std::for_each(l.begin(),l.end(),[]( const auto& s ){ log(s+"\n"); });
-	});
-	log("==== whiteboard ====\n");
-}
-
 boost::beast::flat_buffer copy_to_buffer( const std::string& s ) {
 	boost::beast::flat_buffer b;
 	size_t n = boost::asio::buffer_copy(b.prepare(s.size()),boost::asio::buffer(s));
 	b.commit(n);
 	return b;
+}
+
+bool log_whiteboard() {
+	std::ofstream out(m_logfile,std::ios_base::app);
+	if (!out) return false;
+	const std::string t = k_date_time()+" ";
+	out << t << boost::format("==== whiteboard (%d) ====\n") % m_whiteboard.size();
+	std::for_each(m_whiteboard.begin(),m_whiteboard.end(),[&out,t]( const auto& c ){
+		const std::vector<std::string> l = split(c.text);
+		std::for_each(l.begin(),l.end(),[&out,t]( const auto& s ){ out << t << s << "\n"; });
+	});
+	out << t << "==== whiteboard ====\n";
+	return true;
 }
 
 class request_broadcast_event_t {
