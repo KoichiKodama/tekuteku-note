@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-14";
+static std::string m_version = "build 2025-06-15";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -739,11 +739,13 @@ private:
 #else
 class network_watchdog {
 public:
-	network_watchdog() {};
+	network_watchdog() : is_stopped(false) {};
 	~network_watchdog() {};
 	bool start() { return true; };
-	void stop() {};
-	bool wait() { std::this_thread::sleep_for(std::chrono::seconds(5)); return true; }
+	void stop() { is_stopped = true; };
+	bool wait() { std::this_thread::sleep_for(std::chrono::seconds(5)); return !is_stopped; }
+private:
+	bool is_stopped;
 };
 #endif
 network_watchdog wd; static std::thread thread_wd{};
@@ -895,9 +897,9 @@ int main( int argc, char** argv ) {
 			}
 		}));
 		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
+		wd.stop(); thread_wd.join();
 
 		#ifdef _WINDOWS
-		wd.stop(); thread_wd.join();
 		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
 //		for (auto& proc:m_exec) { proc.terminate(); }
 		#endif
