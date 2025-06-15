@@ -718,38 +718,6 @@ void exec_listen( boost::asio::io_context& ioc, boost::asio::ip::tcp::endpoint e
 }
 #endif
 
-#ifdef _WINDOWS
-class network_watchdog {
-public:
-	network_watchdog() {
-		is_stopped = false;
-		h = NULL;
-		o.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
-		start();
-	};
-	~network_watchdog() { CancelIPChangeNotify(&o); CloseHandle(o.hEvent); };
-	bool start() { return ( NotifyAddrChange(&h,&o) == ERROR_IO_PENDING ); };
-	void stop() { is_stopped = true; SetEvent(o.hEvent); };
-	bool wait() { DWORD rc = WaitForSingleObject(o.hEvent,INFINITE); return ( rc == WAIT_OBJECT_0 && is_stopped == false ? true : false ); }
-private:
-	HANDLE h;
-	OVERLAPPED o;
-	bool is_stopped;
-};
-#else
-class network_watchdog {
-public:
-	network_watchdog() : is_stopped(false) {};
-	~network_watchdog() {};
-	bool start() { return true; };
-	void stop() { is_stopped = true; };
-	bool wait() { std::this_thread::sleep_for(std::chrono::seconds(5)); return !is_stopped; }
-private:
-	bool is_stopped;
-};
-#endif
-network_watchdog wd; static std::thread thread_wd{};
-
 void terminate_server() {
 	request_broadcast.stop();
 	ioc_x.stop(); thread_x.join();
@@ -800,6 +768,26 @@ void load_server_certificate( boost::asio::ssl::context& ctx, const std::string&
 	ctx.set_options(boost::asio::ssl::context::default_workarounds|boost::asio::ssl::context::no_sslv2);
 }
 #endif
+
+void check_network( boost::asio::io_context& ioc, boost::asio::yield_context yield ) {
+	boost::system::error_code ec;
+	boost::asio::steady_timer timer{ioc};
+	while (true) {
+		timer.expires_after(boost::asio::chrono::seconds(30));
+		timer.async_wait(yield[ec]);
+
+		std::vector<network_t> l;
+		if ( enum_network(l) == false ) throw std::runtime_error("enum_network");
+		if ( std::equal(l.begin(),l.end(),m_servers.begin(),m_servers.end(),[]( const network_t& a, const network_t& b ){ return a.address == b.address; }) == false ) {
+			m_servers.swap(l);
+			log("network changed\n");
+			if ( m_servers.empty() ) log("no network\n");
+			std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+			network_changed = true;
+			request_broadcast.set();
+		}
+	}
+}
 
 int main( int argc, char** argv ) {
 	try {
@@ -869,6 +857,7 @@ int main( int argc, char** argv ) {
 				boost::asio::spawn(ioc_x,std::bind(&exec_listen,std::ref(ioc_x),std::ref(ctx),ep,std::placeholders::_1));
 				#endif
 				boost::asio::spawn(ioc_x,std::bind(&broadcast_status,std::placeholders::_1));
+				boost::asio::spawn(ioc_x,std::bind(&check_network,std::ref(ioc_x),std::placeholders::_1));
 				ioc_x.run();
 				m_takers.clear();
 			}
@@ -881,23 +870,8 @@ int main( int argc, char** argv ) {
 		if (!( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",m_host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 )) throw std::runtime_error("spawn_client");
 		#endif
 		#endif
-		thread_wd = std::move(std::thread([]{
-			while ( wd.wait() ) {
-				std::vector<network_t> l;
-				if ( enum_network(l) == false ) throw std::runtime_error("enum_network");
-				if ( std::equal(l.begin(),l.end(),m_servers.begin(),m_servers.end(),[]( const network_t& a, const network_t& b ){ return a.address == b.address; }) == false ) {
-					m_servers.swap(l);
-					log("network changed\n");
-					if ( m_servers.empty() ) log("no network\n");
-					std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
-					network_changed = true;
-					request_broadcast.set();
-				}
-				wd.start();
-			}
-		}));
+
 		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
-		wd.stop(); thread_wd.join();
 
 		#ifdef _WINDOWS
 		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
