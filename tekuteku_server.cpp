@@ -61,7 +61,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-15";
+static std::string m_version = "build 2025-06-16";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -241,6 +241,7 @@ boost::beast::flat_buffer copy_to_buffer( const std::string& s ) {
 }
 
 bool log_whiteboard() {
+	if ( m_whiteboard.empty() ) return true;
 	std::ofstream out(m_logfile,std::ios_base::app);
 	if (!out) return false;
 	const std::string t = k_date_time()+" ";

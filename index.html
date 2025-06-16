@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-14</title>
+<title>てくてくノート ver 2025-06-16</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -778,7 +778,11 @@ textarea_height = $('#my-text').height();
 const resize_observer = new ResizeObserver((entries)=>{ set_screen_mode(); });
 $('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
-$(window).on('beforeunload pagehide',function(){ shortcut_to_cookie(); socket?.close(); });
+$(window).on('beforeunload pagehide',function(){
+	shortcut_to_cookie();
+	socket_send(8);
+	socket?.close();
+});
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
 $('#pre-roll').on('scroll',function(event){ auto_scroll_pre_roll = ( this.scrollHeight-this.scrollTop-this.clienttHeight < 10 ? true:false ); });
 $('#clear').on('click',function(){ if ( confirm('テイクを消去してよい？') == true ) { socket_send(8); } });
