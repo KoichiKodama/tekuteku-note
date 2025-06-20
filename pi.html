@@ -32,24 +32,13 @@ function update_table(data) {
 	const b0 = 'class="btn btn-outline-light pi-connect"';
 	const b1 = 'class="btn btn-outline-warning pi-disconnect"';
 
-	let connection_ethernet = data.ethernet;
-	let connection_wifi = data.wifi;
+	let connection = data.connections;
 	let s = "";
-	connection_ethernet.forEach((c,i)=>{
-		s += ( i == 0 ? `<tr><td rowspan="${connection_ethernet.length}">有線</td>` : '<tr>' );
+	connection.forEach((c,i)=>{
 		switch(c.status) {
-			case 0: s += `<td>${c.name}</td><td>未接続</td><td>${c.addr}</td><td></td></tr>`; break;
-			case 1: s += `<td ${cc}>${c.name}</td><td ${cc}>接続完了</td><td ${cc}>${c.addr}</td><td></td></tr>`; break;
-			default: s += `<td>${c.name}</td><td>利用不可</td><td>${c.addr}</td><td></td></tr>`; break;
-		}
-	});
-
-	connection_wifi.forEach((c,i)=>{
-		s += ( i == 0 ? `<tr><td rowspan="${connection_wifi.length}">WiFi</td>` : '<tr>' );
-		switch(c.status) {
-			case 0: s += `<td>${c.name}</td><td value="${c.name}">未接続</td><td>${c.addr}</td><td><button ${b0} value="${c.name}">接続する</button></td></tr>`; break;
-			case 1: s += `<td ${cc}>${c.name}</td><td ${cc} value="${c.name}">接続完了</td><td ${cc}>${c.addr}</td><td><button ${b1} value="${c.name}">切断する</button></td></tr>`; break;
-			case 9: s += `<td>${c.name}</td><td>利用不可</td><td>${c.addr}</td><td></td></tr>`; break;
+			case 0: s += `<tr><td>${c.name}</td><td value="${c.name}">未接続</td><td><button ${b0} value="${c.name}">接続する</button></td></tr>`; break;
+			case 1: s += `<tr><td ${cc}>${c.name}</td><td ${cc} value="${c.name}">${c.addr}</td><td><button ${b1} value="${c.name}">切断する</button></td></tr>`; break;
+			default: s += `<tr><td>${c.name}</td><td>利用不可</td><td></td></tr>`; break;
 		}
 	});
 	$('#connection-table > tbody').empty().append(s);
@@ -70,7 +59,7 @@ $(document).ready( function(){
 		let ssid = $(this).val();
 		$(`td[value="${ssid}"]`).html('接続中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
 		$.ajax("./pi-control.sh?job=connect&ssid="+ssid,{method:'get',async:true,dataType:'json'})
-			.done((data)=>{ if ( data.status == 0 ) alert(data.meesage); })
+			.done((data)=>{ if ( data.status == 0 ) alert(data.message); })
 			.fail(()=>{ alert("通信エラーです"); })
 			.always(()=>{ location.reload(); });
 	});
