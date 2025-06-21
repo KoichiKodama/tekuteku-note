@@ -4,6 +4,9 @@ import shlex
 import subprocess
 import json
 
+wifi_dev = 'wlan0'
+known_connections = ['AUEWS','AUEWT','AUEWLAN','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
+
 def get_value(key,text):
 	a = text.strip().split('=')
 	if len(a) != 2:
@@ -25,8 +28,6 @@ class connection_t_encoder(json.JSONEncoder):
 		else:
 			return super().default(obj)
 
-wifi_dev = 'wlan0'
-known_connections = ['AUEWS','AUEWT','AUEWLAN','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
 connections = {}
 for c in known_connections:
 	connections[c] = connection_t(c)
@@ -52,13 +53,15 @@ def job_status(force_rescan):
 				addr = r.stdout.strip('\n')
 			connections[name] = connection_t(name,device,status,addr,kind)
 
+	wifi = []
 	o = "-rescan yes" if force_rescan == 1 else ""
 	r = subprocess.run(shlex.split('nmcli -f SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
 	l = r.stdout.splitlines()
 	for s in l[1:len(l)]:
-		name = s.split()[0]
-		if name in connections.keys() and connections[name].status == 9:
-			connections[name].status = 0
+		wifi.append(s.split()[0])
+
+	for c in connections.values():
+		if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
 
 	return { "status":1, "connections":list(connections.values()) }
 

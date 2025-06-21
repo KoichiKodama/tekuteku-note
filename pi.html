@@ -80,7 +80,7 @@ $(document).ready( function(){
 	$('button#pi-shutdown').on('click',function(){
 		if ( window.confirm('ラズパイをシャットダウンして良いですか？') == true ) {
 			$.ajax("./pi-control.sh?job=shutdown",{method:'get',async:true,dataType:'json'})
-				.done((data)=>{ window.close(); })
+				.done((data)=>{ $('button').prop('disabled',true); $('#connection-table > tbody').empty(); })
 				.fail(()=>{ alert("通信エラーです"); })
 		}
 	});
