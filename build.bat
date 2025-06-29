@@ -12,7 +12,7 @@ set LDFLAGS= -link -subsystem:windows -entry:mainCRTStartup
 set LIBS= -libpath:C:\mnt\disk_z\usr\boost\boost_1_84_0/stage/lib
 cl %CXXFLAGS% %CXXINCLUDES% %CXXDEFS% tekuteku_server.cpp %LDFLAGS% %LIBS%
 mt -manifest utf-8.manifest -outputresource:tekuteku_server.exe;#1
-copy tekuteku_server.exe ‚Ä‚­‚Ä‚­ƒm[ƒgƒT[ƒo.exe /y
+copy tekuteku_server.exe ã¦ãã¦ããƒãƒ¼ãƒˆã‚µãƒ¼ãƒ.exe /y
 del tekuteku_server.exe
 del tekuteku_server.obj
 endlocal

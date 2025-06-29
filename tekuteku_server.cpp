@@ -20,7 +20,6 @@
 #include <string>
 #include <thread>
 #include <mutex>
-#include <condition_variable>
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -61,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-24";
+static std::string m_version = "build 2025-06-29";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -401,6 +400,10 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 			const std::string a = (*ii).address.to_string();
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
+		if ( m_cfg.contains("yyprobe") ) r["yyprobe"] = m_cfg["yyprobe"];
+		if ( m_cfg.contains("vosk") ) r["vosk"] = m_cfg["vosk"];
+		if ( m_cfg.contains("amivoice") ) r["amivoice"] = m_cfg["amivoice"];
+		if ( m_cfg.contains("google-translate") ) r["google-translate"] = m_cfg["google-translate"];
 		boost::beast::flat_buffer b = copy_to_buffer(r.dump());
 		p_ws->async_write(b.data(),yield[ec]); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
 		m_takers[p_ws] = info;
@@ -556,36 +559,57 @@ struct send_lambda {
 	}
 };
 
-class http_query_t {
+class url_t {
 public:
-	http_query_t( std::string s ) { parse(s); };
-	~http_query_t() {};
-	void parse( std::string s ) {
-		m_envs.clear();
+	url_t( const std::string url ) { parse(url); };
+	virtual ~url_t() {};
+	void parse( const std::string& url ) {
+		std::string::size_type i_query = url.find("?");
+		std::string::size_type i_anchor = url.find("#");
+		m_path = url.substr(0,i_query);
+		if ( m_path.back() == '/' ) m_path += "index.html";
+		std::string query = ( i_query == std::string::npos ? "" : url.substr(i_query+1,i_anchor) );
+		std::string anchor = ( i_anchor == std::string::npos ? "" : url.substr(i_anchor+1) );
+		m_path_ex = ( m_path.find_last_of(".") == std::string::npos ? "" : m_path.substr(m_path.find_last_of(".")+1) );
+
+		m_params.clear();
 		std::string::size_type ii = 0;
-		std::string::size_type jj = s.find_first_of("&"); if ( jj == std::string::npos ) jj = s.size();
-		while ( ii < s.size() ) {
-			std::string a = s.substr(ii,jj-ii);
+		std::string::size_type jj = query.find_first_of("&"); if ( jj == std::string::npos ) jj = query.size();
+		while ( ii < query.size() ) {
+			std::string a = query.substr(ii,jj-ii);
 			std::string::size_type i = a.find("=");
-			m_envs[a.substr(0,i)] = ( i == std::string::npos ? "" : a.substr(i+1) );
+			m_params[a.substr(0,i)] = ( i == std::string::npos ? "" : a.substr(i+1) );
 			ii = jj+1;
-			jj = s.find_first_of("&",ii);
-			if ( jj == std::string::npos ) jj = s.size();
+			jj = query.find_first_of("&",ii);
+			if ( jj == std::string::npos ) jj = query.size();
 		}
 	};
-	std::vector<std::string> argv() const {
+	std::string path() const { return m_path; };
+	std::string path_ex() const { return m_path_ex; };
+	std::vector<std::string> params() const {
 		std::vector<std::string> r;
-		std::for_each(m_envs.begin(),m_envs.end(),[&r]( const auto& c ){ r.emplace_back(c.first+"="+c.second); });
+		std::for_each(m_params.begin(),m_params.end(),[&r]( const auto& c ){ r.emplace_back(c.first+"="+c.second); });
 		return r;
 	};
-	std::string env( const std::string& key ) const {
-		auto ii = m_envs.find(key);
-		return ( ii == m_envs.end() ? "" : (*ii).second );
+	std::string param( const std::string& key ) const {
+		auto ii = m_params.find(key);
+		return ( ii == m_params.end() ? "" : (*ii).second );
 	};
 
 private:
-	std::map<std::string,std::string> m_envs;
+	std::string m_path;
+	std::string m_path_ex;
+	std::map<std::string,std::string> m_params;
 };
+
+bool is_accessible( const std::string& f ) {
+	if ( f == "/index.html" ) return true;
+	if ( f == "/tekuteku.ico" ) return true;
+	if ( f.substr(0,6) == "/tools" ) return true;
+	if ( f == "/pi.html" ) return true;
+	if ( f == "/pi-control.sh" ) return true;
+	return false;
+}
 
 void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield ) {
 	boost::beast::error_code ec;
@@ -616,12 +640,12 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		return;
 	}
 	if (ec) return;
+
+	url_t url(req.target());
+
 	if ( boost::beast::websocket::is_upgrade(req) ) {
-		if (!m_magic.empty()) {
-			std::string::size_type x = req.target().find("?");
-			std::string query = ( x != std::string::npos ? req.target().substr(x) : "" );
-			if ( query != ("?magic="+m_magic) ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
-		}
+		// magic 確認は websocket に限定
+		if ( m_magic.empty() == false && url.param("magic") != m_magic ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
 		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
 		boost::beast::websocket::stream_base::timeout opt {std::chrono::seconds(5),std::chrono::seconds(30),true};
 		p_ws->set_option(opt);
@@ -629,29 +653,16 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		return;
 	}
 
-	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return send(error_responce(boost::beast::http::status::bad_request,"Unknown HTTP-method"));
-	if ( req.target().empty() || req.target()[0] != '/' || req.target().find("..") != boost::beast::string_view::npos ) return send(error_responce(boost::beast::http::status::bad_request,"Illegal request-target"));
-
-	std::string target = req.target();
-	std::string::size_type i_query = target.find("?");
-	std::string::size_type i_anchor = target.find("#");
-	std::string path = target.substr(0,i_query); if ( path.back() == '/' ) path += "index.html";
-	std::string query = ( i_query == std::string::npos ? "" : target.substr(i_query+1,i_anchor) );
-	std::string anchor = ( i_anchor == std::string::npos ? "" : target.substr(i_anchor+1) );
-	std::string path_ex = ( path.find_last_of(".") == std::string::npos ? "" : path.substr(path.find_last_of(".")+1) );
-	http_query_t http_query(query);
-	if ( path == "/index.html" && !m_magic.empty() && http_query.env("magic") != m_magic ) {
-		// magic 確認は index.html に限定
-		return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
-	}
+	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return send(error_responce(boost::beast::http::status::bad_request,"unsupported http-method"));
+	if ( is_accessible(url.path()) == false ) return send(error_responce(boost::beast::http::status::not_found,url.path()));
 
 	boost::beast::http::response<boost::beast::http::empty_body> res{boost::beast::http::status::ok,req.version()};
 	res.set(boost::beast::http::field::server,m_server_name);
 	res.keep_alive(req.keep_alive());
 
-	if ( path_ex == "sh" ) {
+	if ( url.path_ex() == "sh" ) {
 		auto cwd = boost::process::v2::process_start_dir(std::filesystem::current_path().string());
-		boost::process::v2::popen c(yield.get_executor(),"."+path,http_query.argv(),cwd);
+		boost::process::v2::popen c(yield.get_executor(),"."+url.path(),url.params(),cwd);
 		std::string x;
 		for (;;) {
 			boost::system::error_code ec;
@@ -674,7 +685,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		return send(std::move(res_x));
 	}
 	else {
-		std::string file_path = "." + path;
+		std::string file_path = "." + url.path();
 		boost::beast::http::file_body::value_type body;
 		body.open(file_path.c_str(),boost::beast::file_mode::scan,ec);
 		if ( ec == boost::system::errc::no_such_file_or_directory ) return send(error_responce(boost::beast::http::status::not_found,req.target()));
@@ -792,23 +803,16 @@ void check_network( boost::asio::io_context& ioc, boost::asio::yield_context yie
 
 int main( int argc, char** argv ) {
 	try {
-		{
-			std::ifstream f("config.json");
-			if ( f.is_open() ) m_cfg = nlohmann::json::parse(f);
-		}
+		std::string fname_config = "config.json";
 		argc--; argv++;
 		while ( argc != 0 ) {
-			if ( strcmp(*argv,"--ssl") == 0 ) {
-				std::string ssl_key,ssl_cer,ssl_cer_chain,ssl_pwd;
-				argc--; argv++; m_cfg["ssl"].push_back(*argv);
-				argc--; argv++; m_cfg["ssl"].push_back(*argv);
-				argc--; argv++; m_cfg["ssl"].push_back(*argv);
-				argc--; argv++; m_cfg["ssl"].push_back(*argv);
-			}
-			else if ( strcmp(*argv,"--magic") == 0 ) { argc--; argv++; m_cfg["magic"] = *argv; }
-			else if ( strcmp(*argv,"--port") == 0 ) { argc--; argv++; m_cfg["port"] = atoi(*argv); }
+			if ( strcmp(*argv,"--config") == 0 ) { argc--; argv++; fname_config = *argv; }
 			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
 			argc--; argv++;
+		}
+		{
+			std::ifstream f(fname_config);
+			if ( f.is_open() ) m_cfg = nlohmann::json::parse(f);
 		}
 
 		if ( m_cfg.contains("port") ) {
@@ -818,7 +822,6 @@ int main( int argc, char** argv ) {
 		if ( m_cfg.contains("magic") ) m_magic = m_cfg["magic"].get<std::string>();
 
 		truncate_log();
-		log(( boost::format("option port=%d\n") % m_port ).str());
 		#ifdef USE_SSL
 		std::string key = m_cfg["ssl"][0].get<std::string>();
 		std::string crt = m_cfg["ssl"][1].get<std::string>();
@@ -844,7 +847,7 @@ int main( int argc, char** argv ) {
 		#endif
 
 		m_whiteboard.reserve(4096);
-		log((boost::format("started %s\n") % m_version).str());
+		log((boost::format("started %s on port=%d\n") % m_version % m_port).str());
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) log("no network\n");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });

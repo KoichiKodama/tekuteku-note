@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-24</title>
+<title>てくてくノート ver 2025-06-29</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -184,18 +184,6 @@ function html_encode(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot/g,'"').replace(/&apos;/g,"'").replace(/<br>/g,"\n"); }
 
 var token = {};	// トークン一覧
-
-async function fetch_token( token_name ) {
-	try {
-		const response = await fetch(token_name);
-		if (!response.ok) { return false; }
-		token = await response.json();
-		return true;
- 	}
-	catch (error) { alert('音声認識初期化エラー : '+error); return false; }
-}
-
-function debug(msg) { console.log(msg); }
 
 function recognizer_vosk() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
@@ -414,18 +402,18 @@ function recognizer_default() {
 		}
 		socket_send(0);
 	}
-	sprec.onspeechstart = function(event){ debug(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; socket_send(2); }
-	sprec.onspeechend = function(event){ debug(`speechend ${state}`); }
-	sprec.onstart = function(){ debug(`start ${state}`); change_state(2); }
+	sprec.onspeechstart = function(event){ console.log(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; socket_send(2); }
+	sprec.onspeechend = function(event){ console.log(`speechend ${state}`); }
+	sprec.onstart = function(){ console.log(`start ${state}`); change_state(2); }
 	sprec.onend = function(){
-		debug(`end ${state}`);
+		console.log(`end ${state}`);
 		switch (state) {
 			case 2: { sprec.start(); break; }
 			case 9: { if ( retry_count == 0 ) { sprec.start(); retry_count++; break; } }
 			default: { change_state(0); break; }
 		}
 	}
-	sprec.onerror = function(event){ debug(`error ${state} ${event.error}`); sprec.stop(); if ( event.error != "no-speech" ) { mic.stop(); change_state(9); } }
+	sprec.onerror = function(event){ console.log(`error ${state} ${event.error}`); sprec.stop(); if ( event.error != "no-speech" ) { mic.stop(); change_state(9); } }
 
 	var recognizer_ = {
 		start : start_,
@@ -549,11 +537,11 @@ function socket_open(url) {
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
 	socket.onopen = function(event){ socket_send(0); };
 	socket.onclose = function(event){
-		debug(`tekuteku-socket close ${event.code} ${event.reason}`);
+		console.log(`tekuteku-socket close ${event.code} ${event.reason}`);
 		$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
 		reset_timer = setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
 	};
-	socket.onerror = function(event){ debug(`tekuteku-socket error`); debug(event); } // iphone で background 移行数秒後に発生する。
+	socket.onerror = function(event){ console.log(`tekuteku-socket error`); console.log(event); } // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
 	clearTimeout(reset_timer);
 }
@@ -598,6 +586,29 @@ function update_table_takers() {
 	if ( screen_mode == 0 && !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
 }
 
+function parse_token() {
+	let n = 0;
+	if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
+	if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
+	if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); n++; }
+	if ( n != 0 ) $('#recognition-engine').show();
+	if ( 'google-translate' in token ) {
+		translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
+			let api_key = token['google-translate'].key;
+			if ( translate_lang_to == 'none' ) { return c.text; }
+			if (!( translate_lang_to in c )) {
+				$.ajax(
+					"https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
+					{type:'post',dataType:'json',async:false})
+					.done((result)=>{ c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); })
+					.fail(()=>{ alert("error in google-translate"); });
+			}
+			return c[translate_lang_to];
+		};
+		$('#translate-lang').show();
+	}
+}
+
 async function receive(event) {
 //	var response = JSON.parse( await event.data.text() ); // for binary
 	var response = JSON.parse(event.data);
@@ -605,6 +616,11 @@ async function receive(event) {
 	case 0 :
 		id = response.id;
 		host_select(response.server);
+		if ( 'yyprobe' in response ) token['yyprobe'] = response['yyprobe'];
+		if ( 'vosk' in response ) token['vosk'] = response['vosk'];
+		if ( 'amivoice' in response ) token['amivoice'] = response['amivoice'];
+		if ( 'google-translate' in response ) token['google-translate'] = response['google-translate'];
+		parse_token();
 		break;
 	case 1 :
 		response.whiteboard.forEach((c)=>{ whiteboard[c.i] = c; });
@@ -994,31 +1010,6 @@ $('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
 
 $('#translate-lang').hide();
 $('#recognition-engine').hide();
-
-fetch_token('./config.json').then((ok)=>{
-	if (ok) {
-		let n = 0;
-		if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
-		if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
-		if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); n++; }
-		if ( n != 0 ) $('#recognition-engine').show();
-		if ( 'google-translate' in token ) {
-			translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
-				let api_key = token['google-translate'].key;
-				if ( translate_lang_to == 'none' ) { return c.text; }
-				if (!( translate_lang_to in c )) {
-					$.ajax(
-						"https://translation.googleapis.com/language/translate/v2?key="+api_key+"&q="+encodeURI(c.text)+"&source=ja&target="+translate_lang_to,
-						{type:'post',dataType:'json',async:false})
-						.done((result)=>{ c[translate_lang_to] = decodeURI(result.data.translations[0].translatedText); })
-						.fail(()=>{ alert("error in google-translate"); });
-				}
-				return c[translate_lang_to];
-			};
-			$('#translate-lang').show();
-		}
-	}
-});
 
 if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
 $('#pi-control').hide();

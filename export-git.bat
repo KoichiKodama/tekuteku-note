@@ -1,3 +1,3 @@
 @echo off
 if exist tekuteku-note.zip del tekuteku-note.zip
-call 7z a tekuteku-note.zip index.html tekuteku.ico ‚Ä‚­‚Ä‚­ƒm[ƒgƒT[ƒo.exe tools 1>NUL
+call 7z a tekuteku-note.zip index.html tekuteku.ico emoji-smile.svg ã¦ãã¦ããƒŽãƒ¼ãƒˆã‚µãƒ¼ãƒ.exe tools 1>NUL
