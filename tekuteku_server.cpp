@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-29";
+static std::string m_version = "build 2025-06-30";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -544,19 +544,17 @@ boost::beast::string_view mime_type( boost::beast::string_view path ) {
 	return "application/text";
 }
 
-struct send_lambda {
-	tcp_stream_t& stream_;
-	bool& close_;
-	boost::beast::error_code& ec_;
-	boost::asio::yield_context yield_;
+struct reply_t {
+	tcp_stream_t& m_stream;
+	boost::beast::error_code& m_ec;
+	boost::asio::yield_context m_yield;
 
-	send_lambda( tcp_stream_t& stream, bool& close, boost::system::error_code& ec, boost::asio::yield_context yield ) : stream_(stream),close_(close),ec_(ec),yield_(yield) {}
-	template<bool isRequest,class Body,class Fields> void operator()( boost::beast::http::message<isRequest,Body,Fields>&& msg ) const {
-		// Determine if we should close the connection after
-		close_ = msg.need_eof();
-		boost::beast::http::serializer<isRequest,Body,Fields> sr{msg};
-		boost::beast::http::async_write(stream_,sr,yield_[ec_]);
-	}
+	reply_t( tcp_stream_t& stream, boost::system::error_code& ec, boost::asio::yield_context yield ) : m_stream(stream),m_ec(ec),m_yield(yield) {};
+	template<class body> void operator()( boost::beast::http::response<body>&& msg ) const {
+		if ( msg.need_eof() ) log("unexpected need_eof() = true in reply_t\n");
+		boost::beast::http::response_serializer<body> s{msg};
+		boost::beast::http::async_write(m_stream,s,m_yield[m_ec]);
+	};
 };
 
 class url_t {
@@ -621,18 +619,19 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	boost::beast::flat_buffer buffer;
 	boost::beast::http::request<boost::beast::http::string_body> req;
 
-	auto const error_responce = [&req]( boost::beast::http::status status, boost::beast::string_view why ){
+	auto response = [&req]( boost::beast::http::status status, const std::string& msg ){
 		boost::beast::http::response<boost::beast::http::string_body> res{status,req.version()};
 		res.set(boost::beast::http::field::server,m_server_name);
 		res.set(boost::beast::http::field::content_type,"text/html");
 		res.keep_alive(req.keep_alive());
-		res.body() = std::string(why);
+		res.body() = msg;
 		res.prepare_payload();
 		return res;
 	};
-
-	bool close = false;
-	send_lambda send{stream,close,ec,yield};
+	auto bad_request = [&response]( const std::string& msg ){ return response(boost::beast::http::status::bad_request,msg); };
+	auto not_found = [&response]( const std::string& msg ){ return response(boost::beast::http::status::not_found,msg); };
+	auto internal_error = [&response]( const std::string& msg ){ return response(boost::beast::http::status::internal_server_error,msg); };
+	reply_t reply{stream,ec,yield};
 
 	boost::beast::http::async_read(stream,buffer,req,yield[ec]);
 	if ( ec == boost::beast::http::error::end_of_stream ) {
@@ -645,7 +644,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 
 	if ( boost::beast::websocket::is_upgrade(req) ) {
 		// magic 確認は websocket に限定
-		if ( m_magic.empty() == false && url.param("magic") != m_magic ) return send(error_responce(boost::beast::http::status::bad_request,"authentication failure"));
+		if ( m_magic.empty() == false && url.param("magic") != m_magic ) return reply(bad_request("authentication failure"));
 		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
 		boost::beast::websocket::stream_base::timeout opt {std::chrono::seconds(5),std::chrono::seconds(30),true};
 		p_ws->set_option(opt);
@@ -653,8 +652,8 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 		return;
 	}
 
-	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return send(error_responce(boost::beast::http::status::bad_request,"unsupported http-method"));
-	if ( is_accessible(url.path()) == false ) return send(error_responce(boost::beast::http::status::not_found,url.path()));
+	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return reply(bad_request("unsupported http-method"));
+	if ( is_accessible(url.path()) == false ) return reply(not_found(url.path()));
 
 	boost::beast::http::response<boost::beast::http::empty_body> res{boost::beast::http::status::ok,req.version()};
 	res.set(boost::beast::http::field::server,m_server_name);
@@ -673,30 +672,30 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 				if ( ec == boost::asio::error::eof ) break;
 				log((boost::format("exec_http_session error=(%d,%s)\n") % ec.value() % ec.message()).str());
 				std::string m = (boost::format("error=(%d,%s)") % ec.value() % ec.message()).str();
-				return send(error_responce(boost::beast::http::status::internal_server_error,m)); // 500
+				return reply(internal_error(m));
 			}
 		}
 		x = x.substr(x.find("\n\n")+2);
 		res.set(boost::beast::http::field::content_type,"text/plain");
 		res.content_length(x.size());
-		if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
+		if ( req.method() == boost::beast::http::verb::head ) return reply(std::move(res));
 		boost::beast::http::response<boost::beast::http::string_body> res_x{res};
 		res_x.body() = std::move(x);
-		return send(std::move(res_x));
+		return reply(std::move(res_x));
 	}
 	else {
 		std::string file_path = "." + url.path();
 		boost::beast::http::file_body::value_type body;
 		body.open(file_path.c_str(),boost::beast::file_mode::scan,ec);
-		if ( ec == boost::system::errc::no_such_file_or_directory ) return send(error_responce(boost::beast::http::status::not_found,req.target()));
-		if (ec) return send(error_responce(boost::beast::http::status::internal_server_error,ec.message()));
+		if ( ec == boost::system::errc::no_such_file_or_directory ) return reply(not_found(url.path()));
+		if (ec) return reply(internal_error(ec.message()));
 		auto const size = body.size();
 		res.set(boost::beast::http::field::content_type,mime_type(file_path));
 		res.content_length(size);
-		if ( req.method() == boost::beast::http::verb::head ) return send(std::move(res));
+		if ( req.method() == boost::beast::http::verb::head ) return reply(std::move(res));
 		boost::beast::http::response<boost::beast::http::file_body> res_x{res};
 		res_x.body() = std::move(body);
-		return send(std::move(res_x));
+		return reply(std::move(res_x));
 	}
 }
 
