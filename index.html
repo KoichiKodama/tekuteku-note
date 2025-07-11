@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-06-29</title>
+<title>てくてくノート ver 2025-07-11</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
@@ -14,9 +14,9 @@
 <div class="row">
 <div class="col col-10">
 	<div id="host" class="w-100 px-3 py-2 m-2 rounded-2 text-truncate fs-taker"></div>
-	<div class="bg-dark" style="display:none;" id="whiteboard-exclude"></div>
+	<div class="bg-dark" style="height:1;" id="whiteboard-exclude"></div>
 	<div class="input-group m-2 align-items-start bg-dark" style="overflow-y:auto;height:40vh;" id="whiteboard-div">
-		<table class="table table-sm table-dark table-borderless align-left m-2" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
+		<table class="table table-sm table-dark table-borderless align-left" id="whiteboard-table" style="table-layout:fixed;word-wrap:break-word;overflow-wrap:break-word;"></table>
 	</div>
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
@@ -42,10 +42,18 @@
 			<input type="file" class="form-control" id="shortcut-load-file" style="display:none;" />
 		</div>
 	</div>
-	<div class="input-group m-2 pt-5"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
-	<div id="pi-control" class="m-2 pt-auto">
-		<a class="btn btn-outline-info" href="./pi.html" target="_blank">ラズパイ確認</a>
+	<div class="input-group">
+		<div class="btn-group ms-2 my-2"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
+		<div class="btn-group ms-2 my-2"><a class="btn btn-outline-info" id="pi" href="./pi.html" target="pi">ラズパイ制御</a></div>
 	</div>
+<!--<div id="pi-control" class="justify-content-start">
+		<div class="dropdown" id="pi-network-connections">
+			<button class="btn btn-outline-warning dropdown-toggle mx-2 my-1" data-bs-toggle="dropdown" aria-expanded="false" value="none">ラズパイネットワーク無</button>
+			<ul class="dropdown-menu"></ul>
+		</div>
+		<div><button class="btn btn-outline-secondary mx-2 my-1" id="pi-shutdown">ラズパイ終了</button></div>
+		<div class="mx-2 my-1"><a class="link-info" href="./ssl-keys/tekuteku-pi.crt" download>ラズパイ証明書</a></div>
+	</div>-->
 </div>
 </div>
 <div class="row">
@@ -159,8 +167,8 @@ var whiteboard = [];
 var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
 var my_text_previous = '';
 var m_takers = [];
-var reset_timer; // 強制消去用タイマー
-var minimum_container_height = 0;
+var timer_reset; // 強制消去用タイマー
+var timer_ping; // ソケット保持用タイマー
 
 var recognizer = null;
 var recognition_local = false;
@@ -443,12 +451,7 @@ function recognition_control_update(state) {
 		case 0: { $('#recognition-control').prop('disabled',false).text('音声認識開始').val(0); break; }
 		case 1: { $('#recognition-control').prop('disabled',true).text('お待ち下さい').val(1); break; }
 		case 2: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-warning').addClass('btn-outline-success').text('音声認識停止').val(2); break; }
-		case 9: {
-			$('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').val(9); 
-//			$('#recognition-engine').trigger('hide.bs.dropdown');
-//			recognizer.start();
-			break;
-		}
+		case 9: { $('#recognition-control').prop('disabled',false).removeClass('btn-outline-success').addClass('btn-outline-warning').val(9); break; }
 	}
 }
 
@@ -503,6 +506,7 @@ function my_split(s,min_length,max_length,lang) {
 
 function socket_send( status ) {
 	if ( socket?.readyState === 1 ) {
+		if ( status === undefined ) { socket.send(''); return; } // ping-pong 送信
 		var response = new Object();
 		response.status = status;	// 確定入力無(0),確定入力有(1),音声認識セッション開始(2),アプリ共有更新(3),黒板クリア(8),全データ要求(9)
 		if ( status != 8 && screen_mode == 0 ) {
@@ -539,11 +543,13 @@ function socket_open(url) {
 	socket.onclose = function(event){
 		console.log(`tekuteku-socket close ${event.code} ${event.reason}`);
 		$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
-		reset_timer = setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
+		timer_reset = setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
+		clearInterval(timer_ping);
 	};
 	socket.onerror = function(event){ console.log(`tekuteku-socket error`); console.log(event); } // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
-	clearTimeout(reset_timer);
+	clearTimeout(timer_reset);
+	timer_ping = setInterval(()=>{ if ( keep_alive == false ) { socket_send(); } else { keep_alive = false; } },10000);
 }
 
 async function host_select(hosts) {
@@ -574,7 +580,7 @@ async function host_select(hosts) {
 
 function update_table_takers() {
 	let f = function(i,s){ return sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',i,s); };
-	if ( is_small_screen() ) f = function(i,s){ return sprintf('<tr><td class="teku">%s</td></tr>',s); };
+	if (is_mobile) f = function(i,s){ return sprintf('<tr><td class="teku">%s</td></tr>',s); };
 	let num_ro = 0;
 	$('#table-takers > tbody').empty();
 	m_takers.forEach((c)=>{
@@ -583,7 +589,7 @@ function update_table_takers() {
 		let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
 		$('#table-takers > tbody').append(f(c.num,s));
 	});
-	if ( screen_mode == 0 && !is_small_screen() && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
+	if ( screen_mode == 0 && !is_mobile && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
 }
 
 function parse_token() {
@@ -689,18 +695,9 @@ function set_theme(theme) {
 	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
 }
 
-function eval_minimum_container_height() {
-	let o = $('div.container-fluid > div.row > div.col:nth-child(2) > div:visible').last().get(0);
-	if ( o !== undefined ) minimum_container_height = Math.ceil(o.getBoundingClientRect().bottom+$('div.container-fluid > div.row:last-child').height())+10;
-}
-
-function is_small_screen(axis) {
-	if ( axis == 'h' ) return ( window.visualViewport.height < minimum_container_height );
-	return ( $(window).width() < 576 );
-}
-
 function set_screen_mode(mode) {
-	eval_minimum_container_height();
+	let is_small_screen = function(){ return ( is_mobile ? true : window.visualViewport.width < 576 ); }
+
 	if ( mode != null ) {
 		screen_mode = mode;
 		$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
@@ -708,6 +705,7 @@ function set_screen_mode(mode) {
 	$('div.container-fluid div.row:first-child').css('transform','');
 	const o = $('div.container-fluid > div.row:first-child > div.col:first-child');
 	if ( screen_mode != 0 || is_small_screen() ) { o.removeClass('col-10').addClass('col-12'); } else { o.removeClass('col-12').addClass('col-10'); }
+	$('#whiteboard-exclude').height(1);
 
 	switch(screen_mode) {
 	case 0:
@@ -721,23 +719,21 @@ function set_screen_mode(mode) {
 	case 1:
 	case 2:
 		$('.taker,.taker-voice-recognition,.taker-extra').hide();
-		if ( is_small_screen() == false ) { $('#host').show(); }
+		if (!is_mobile) { $('#host').show(); }
 		set_theme('dark');
 		break;
 	}
 
-	const height = window.innerHeight;
-	const minimum_whiteboard_height = 200;
-	let height_container = $('div.container-fluid').height();
-	let height_delta = Math.floor(height-height_container);
-	let height_menu = $('div.container-fluid > div.row:last-child').height();
-	let height_whiteboard = $('#whiteboard-div').height()+height_delta;
-	if ( is_small_screen('h') == true ) height_whiteboard += height_menu;
-	if ( height_whiteboard < minimum_whiteboard_height ) height_whiteboard = minimum_whiteboard_height;
-	$('#whiteboard-exclude').hide();
-	if ( screen_mode == 2 && height_whiteboard > minimum_whiteboard_height ) {
-		$('#whiteboard-exclude').css('height',(height_whiteboard-minimum_whiteboard_height)+'px').show();
-		height_whiteboard = minimum_whiteboard_height;
+	const whiteboard_height_minimum = ( $('.taker-extra').is(':visible') ? 250 : 0 );
+	const whiteboard_height_jimaku = 200;
+	const height_window = window.visualViewport.height; // window.innerHeight には水平スクロールバーも含まれるためこちらを使う。
+	const height_container = $('div.container-fluid').height();
+	const height_menu = $('div.container-fluid > div.row:last-child').height();
+	const height_delta = height_window-height_container+( is_mobile ? height_menu : 0 );
+	let height_whiteboard = Math.max(Math.floor($('#whiteboard-div').height()+height_delta),whiteboard_height_minimum);
+	if ( screen_mode == 2 ) {
+		$('#whiteboard-exclude').height(height_whiteboard-whiteboard_height_jimaku);
+		height_whiteboard = whiteboard_height_jimaku;
 	}
 	$('#whiteboard-div').height(height_whiteboard);
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
@@ -785,6 +781,7 @@ function scroll_input() {
 	window.scroll({top:$('div.container-fluid > div.row:last-child').offset().top-window.visualViewport.height,behavior:'instant'});
 }
 
+const is_mobile = /Android|iPhone/i.test(window.navigator.userAgent)
 set_font_size('fs-4');
 set_theme('dark');
 set_screen_mode(0);
@@ -796,7 +793,6 @@ $('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_ob
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
 $(window).on('beforeunload pagehide',function(){
 	shortcut_to_cookie();
-	socket_send(8);
 	socket?.close();
 });
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
@@ -942,9 +938,6 @@ $(document).on('keydown',function(event){
 			$('#my-text').val('').height(textarea_height);
 			my_text_index = -1;
 			break;
-		}
-	}
-	switch ( event.key ) {
 		case 'F1' : event.preventDefault(); append_input($('#key-1').val()); break;
 		case 'F2' : event.preventDefault(); append_input($('#key-2').val()); break;
 		case 'F3' : event.preventDefault(); append_input($('#key-3').val()); break;
@@ -954,6 +947,7 @@ $(document).on('keydown',function(event){
 		case 'F7' : event.preventDefault(); append_input($('#key-7').val()); break;
 		case 'F8' : event.preventDefault(); append_input($('#key-8').val()); break;
 		case 'F9' : event.preventDefault(); append_input($('#key-9').val()); break;
+		}
 	}
 });
 
@@ -1011,14 +1005,68 @@ $('#shortcut').on('hide.bs.dropdown',({clickEvent})=>{
 $('#translate-lang').hide();
 $('#recognition-engine').hide();
 
+function pi_check_network() {
+	$.ajax("./pi-control.sh?job=status",{method:'get',async:true,dataType:'json',timeout:0})
+		.done((data)=>{
+			if ( data.status == 1 ) {
+				if ( data.connections.find((c) => c.status == 1 ) === undefined ) alert('ラズパイがネットワークにつながっていません');
+			}
+			else alert('ラズパイの内部エラーです');
+		})
+		.fail(()=>{ alert("ラズパイとの通信エラーです"); })
+}
+
+/*
+function update_pi_network() {
+	$.ajax("./pi-control.sh?job=status",{method:'get',async:true,dataType:'json',timeout:0})
+		.done((data)=>{
+			if ( data.status == 1 ) {
+				let ok = false;
+				let o = $('#pi-network-connections > ul');
+				o.empty();
+				data.connections.forEach((c,i)=>{
+					// sim-nttpc で正しく取得できないので c.addr は使わない。
+					switch(c.status) {
+						case 0: o.append(`<li class="dropdown-item" data-network="${c.name}">${c.name}</li>`); break;
+						case 1: o.append(`<li class="dropdown-item text-bg-primary" data-network="${c.name}">${c.name}</li>`); ok = true; break;
+					}
+				});
+				if (ok) $('#pi-network-connections > button').removeClass('btn-outline-warning').addClass('btn-outline-success').text('ラズパイネット有');
+				else $('#pi-network-connections > button').removeClass('btn-outline-success').addClass('btn-outline-warning').text('ラズパイネット無');
+			}
+			else alert(data.message);
+		})
+		.fail(()=>{ alert("通信エラーです"); })
+}
+
+$('#pi-network-connections').on('hide.bs.dropdown',({clickEvent})=>{
+	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+		$('#pi-network-connections li.text-bg-primary').removeClass('text-bg-primary');
+		let ssid = $(clickEvent.target).data('network');
+		$.ajax("./pi-control.sh?job=connect&ssid="+ssid,{method:'get',async:true,dataType:'json'})
+			.done((data)=>{ if ( data.status == 1 ) { $(clickEvent.target).addClass('text-bg-primary'); } else { alert(data.message); } })
+			.fail(()=>{ alert("通信エラーです"); })
+			.always(()=>{ location.reload(); });
+	}
+});
+
+$('button#pi-shutdown').on('click',function(){
+	if ( window.confirm('ラズパイをシャットダウンして良いですか？') == true ) {
+		$.ajax("./pi-control.sh?job=shutdown",{method:'get',async:true,dataType:'json'})
+			.done((data)=>{})
+			.fail(()=>{ alert("通信エラーです"); })
+	}
+});
+*/
+
 if ( use_voice_recognition() == true ) { $('#recognition-engine').trigger('hide.bs.dropdown'); }
-$('#pi-control').hide();
+$('#pi').hide();
 switch (location.protocol) {
 	case 'https:':
 		host = location.host;
 		tekuteku_url = "wss://"+location.host+location.search;
 		$('#clear').parent().show();
-		fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { $('#pi-control').show(); } });
+		fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { pi_check_network(); $('#pi').show(); } });
 		break;
 	case 'http:':
 		host = location.host;

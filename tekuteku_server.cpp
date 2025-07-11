@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-06-30";
+static std::string m_version = "build 2025-07-11";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -221,8 +221,9 @@ std::vector<whiteboard_element_t> m_whiteboard;
 boost::asio::ip::port_type m_port = DEFAULT_PORT;
 std::vector<network_t> m_servers;
 int num_connected = 0;	// 延べ接続テイカー
-bool network_changed = false;
+int whiteboard_updated_index = 0;
 bool whiteboard_updated = false;
+bool network_changed = false;
 
 std::vector<std::string> split( const std::string& x ) {
 	std::vector<std::string> l;
@@ -255,18 +256,16 @@ bool log_whiteboard() {
 
 class request_broadcast_event_t {
 public:
-	request_broadcast_event_t( boost::asio::io_context& ioc ) : m_count(0),m_stop(false),m_timer(ioc) {}
+	request_broadcast_event_t() : m_count(0),m_stop(false) {};
 	virtual ~request_broadcast_event_t() {};
-	void set() {
-		m_count++;
-		m_timer.cancel();
-	};
+	void set() { m_count++; };
 	void stop() { m_stop = true; set(); };
 	bool wait( boost::asio::yield_context yield ) {
-		boost::system::error_code ec;
+		boost::asio::steady_timer m_timer{yield.get_executor()};
 		for (;;) {
 			if ( m_count != 0 ) { m_count = 0; break; }
-			m_timer.expires_after(boost::asio::chrono::seconds(60));
+			m_timer.expires_after(boost::asio::chrono::milliseconds(200));
+			boost::system::error_code ec;
 			m_timer.async_wait(yield[ec]);
 		}
 		return ( m_stop == true ? false : true );
@@ -276,16 +275,10 @@ public:
 private:
 	int m_count;
 	bool m_stop;
-	boost::asio::steady_timer m_timer;
 };
 boost::asio::io_context ioc_x(6);
 static std::thread thread_x{};
-request_broadcast_event_t request_broadcast{ioc_x};
-
-const std::string get_taker_id( const std::shared_ptr<websocket_stream_t>& p_ws ) {
-	if ( m_takers.find(p_ws) == m_takers.end() ) return "erased-socket";
-	return m_takers.at(p_ws).id;
-}
+request_broadcast_event_t request_broadcast;
 
 void broadcast_status( boost::asio::yield_context yield ) {
 	nlohmann::json j_whiteboard = nlohmann::json::array();
@@ -296,48 +289,48 @@ void broadcast_status( boost::asio::yield_context yield ) {
 
 		if ( whiteboard_updated == true ) {
 			j_whiteboard.clear();
-			j_whiteboard_full.clear();
-			for (int i=0;i<m_whiteboard.size();i++) {
+			j_whiteboard_full.get_ref<std::vector<nlohmann::json>&>().resize(m_whiteboard.size());
+			for (int i=whiteboard_updated_index;i<m_whiteboard.size();i++) {
 				auto& c = m_whiteboard[i];
-				nlohmann::json x;
-				x["text"] = c.text;
-				x["i"] = i;
-				x["edit"] = c.edit;
-				j_whiteboard_full.push_back(x);
 				if ( c.tobe_sent == true ) {
-					j_whiteboard.push_back(x);
+					nlohmann::json x;
+					x["text"] = c.text;
+					x["i"] = i;
+					x["edit"] = c.edit;
+					j_whiteboard.emplace_back(x);
+					j_whiteboard_full[i] = x;
 					c.tobe_sent = false;
 				}
 			}
-			whiteboard_updated = false; debug_whiteboard_update++;
+			whiteboard_updated_index = m_whiteboard.size();
+			whiteboard_updated = false;
+			debug_whiteboard_update++;
 		}
 		else j_whiteboard.clear();
 
-		std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> l_takers;
+		std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> x_takers;
 		nlohmann::json j_takers;
-
-		for (auto ii=m_takers.begin();ii!=m_takers.end();) {
-			std::shared_ptr<websocket_stream_t> p_ws = ii->first;
-			if ((p_ws)&&(p_ws->is_open())) { l_takers.insert(*(ii++)); } else { p_ws.reset(); ii = m_takers.erase(ii); }
-		}
-
-		for (auto& e : l_takers) {
-			const taker_info_t& t = e.second;
-			nlohmann::json x;
-			if (!t.is_readonly) x["text"] = t.text;
-			x["id"] = t.id;
-			x["num"] = t.num;
-			j_takers.push_back(x);
-		}
-
-		for (auto e : l_takers) {
+		for (auto& e:m_takers) {
 			std::shared_ptr<websocket_stream_t> p_ws = e.first;
-			taker_info_t& t = e.second;
+			const taker_info_t t = e.second;
+			if ((p_ws)&&(p_ws->is_open())) {
+				nlohmann::json x;
+				if (!t.is_readonly) x["text"] = t.text;
+				x["id"] = t.id;
+				x["num"] = t.num;
+				j_takers.emplace_back(x);
+				x_takers.insert(e);
+			}
+		}
+
+		for (auto& e:x_takers) {
+			std::shared_ptr<websocket_stream_t> p_ws = e.first;
+			taker_info_t t = e.second;
 			if ((p_ws)&&(p_ws->is_open())) {
 				nlohmann::json x;
 				x["type"] = 1;
 				x["takers"] = j_takers;
-				x["whiteboard_size"] = m_whiteboard.size();
+				x["whiteboard_size"] = j_whiteboard_full.size();
 				if ( t.is_init == true ) {
 					x["whiteboard"] = j_whiteboard_full;
 					t.is_init = false; debug_write_full++;
@@ -346,47 +339,45 @@ void broadcast_status( boost::asio::yield_context yield ) {
 				boost::beast::flat_buffer b = copy_to_buffer(x.dump());
 				boost::system::error_code ec;
 				p_ws->async_write(b.data(),yield[ec]); debug_write++;
-				if (ec) log((boost::format("write error %s (%s)\n") % get_taker_id(p_ws) % ec.message()).str());
+				if (ec) log((boost::format("write error %s (%s)\n") % t.id % ec.message()).str());
 			}
-			else log((boost::format("write close %s\n") % get_taker_id(p_ws)).str());
+			else log((boost::format("write skipped %s\n") % t.id).str());
 		}
 
+		#ifndef USE_SSL
 		if ( network_changed == true ) {
 			network_changed = false;
-			bool rc = false;
-			std::string x = "127.0.0.1";
-			for (auto ii : l_takers) {
-				taker_info_t& info = ii.second;
-				if ( info.id.compare(0,x.size(),x) == 0 ) {
-					std::shared_ptr<websocket_stream_t> p_ws = ii.first;
-					nlohmann::json r;
-					r["type"] = 0;
-					r["id"] = info.id;
-					r["num"] = info.num;
-					r["server"] = nlohmann::json::array();
+			const std::string localhost = "127.0.0.1";
+			for (auto& e:m_takers) {
+				const taker_info_t& info = e.second;
+				if ( info.id.compare(0,localhost.size(),localhost) == 0 ) {
+					std::shared_ptr<websocket_stream_t> p_ws = e.first;
+					nlohmann::json x;
+					x["type"] = 0;
+					x["id"] = info.id;
+					x["num"] = info.num;
+					x["server"] = nlohmann::json::array();
 					for (auto ii=m_servers.begin();ii!=m_servers.end();ii++) {
 						const std::string a = (*ii).address.to_string();
-						r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
+						x["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 					}
-					boost::beast::flat_buffer b = copy_to_buffer(r.dump());
+					boost::beast::flat_buffer b = copy_to_buffer(x.dump());
 					boost::system::error_code ec;
 					p_ws->async_write(b.data(),yield[ec]); debug_write++;
-					if (ec) {
-						log((boost::format("write error %s (%s)\n") % info.id % ec.message()).str());
-					}
-					else rc = true;
+					if (ec) log((boost::format("error notify network change to %s (%s)\n") % info.id % ec.message()).str());
 				}
 			}
 		}
+		#endif
 	}
 }
 
 void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::beast::http::request<boost::beast::http::string_body> req, boost::asio::yield_context yield ) {
+	taker_info_t info;
 	try {
 		boost::system::error_code ec;
 		p_ws->async_accept(req,yield); debug_async_accept++;
 		auto ep = boost::beast::get_lowest_layer(*p_ws).socket().remote_endpoint(ec);
-		taker_info_t info;
 		info.id = ( boost::format("%s:%d") % ep.address().to_string() % ep.port() ).str();
 		info.num = num_connected++;
 		info.is_init = true;
@@ -412,18 +403,14 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 
 		for (;;) {
 			taker_info_t& info = m_takers[p_ws];
-
 			boost::beast::flat_buffer buffer;
 			p_ws->async_read(buffer,yield[ec]); debug_async_read++;
 			if ( ec == boost::beast::websocket::error::closed ) {
 				log((boost::format("read close %s\n") % info.id).str());
 				break;
 			}
-			#ifdef USE_SSL
-			if ( ec && ec != boost::asio::ssl::error::stream_truncated ) {
-			#else
+			// SSL 接続で ec == boost::asio::ssl::error::stream_truncated を除外した為に無限ループになったと推測。
 			if (ec) {
-			#endif
 				log((boost::format("read error %s (%s)\n") % info.id % ec.message()).str());
 				break;
 			}
@@ -436,6 +423,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 					log_whiteboard();
 					m_whiteboard.clear();
 					std::for_each(m_takers.begin(),m_takers.end(),[]( auto& e ){ e.second.whiteboard_voice_index = 0; });
+					whiteboard_updated_index = 0;
 					whiteboard_updated = true;
 				}
 				if ( status == 9 ) info.is_init = true;
@@ -459,6 +447,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 								c.text = text;
 								c.edit = 2;
 								c.tobe_sent = true;
+								whiteboard_updated_index = std::min(whiteboard_updated_index,text_index);
 							}
 							else m_whiteboard.push_back(whiteboard_element_t(text,-1,info.num)); // 未確定の音声認識結果で削除されたものを編集した場合
 						}
@@ -472,6 +461,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 							c.text = text;
 							c.edit = 1;
 							c.tobe_sent = true;
+							whiteboard_updated_index = std::min(whiteboard_updated_index,text_index);
 							whiteboard_updated = true;
 						}
 					}
@@ -499,6 +489,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 							if ( c.edit == 0 && c.text != text ) {
 								c.text = text;
 								c.tobe_sent = true;
+								whiteboard_updated_index = std::min(whiteboard_updated_index,static_cast<int>(std::distance(m_whiteboard.begin(),ii)));
 							}
 						}
 						ii++;
@@ -515,45 +506,40 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 		}
 		log((boost::format("session stop %s\n") % info.id).str());
 	}
-	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
-	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % get_taker_id(p_ws) % e.what()).str()); }
-	m_takers.erase(p_ws); p_ws.reset();
+	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % info.id % e.what()).str()); }
+	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % info.id % e.what()).str()); }
+	m_takers.erase(p_ws);
 	log((boost::format("session terminated total=%d\n") % m_takers.size()).str());
 	request_broadcast.set();
 }
 
 
-boost::beast::string_view mime_type( boost::beast::string_view path ) {
-	auto const ext = [&path]{
-		auto const pos = path.rfind(".");
-		if ( pos == boost::beast::string_view::npos ) return boost::beast::string_view{};
-		return path.substr(pos);
-	}();
-	if ( boost::beast::iequals(ext,".html")) return "text/html";
-	if ( boost::beast::iequals(ext,".css" )) return "text/css";
-	if ( boost::beast::iequals(ext,".txt" )) return "text/plain";
-	if ( boost::beast::iequals(ext,".js"  )) return "application/javascript";
-	if ( boost::beast::iequals(ext,".json")) return "application/json";
-	if ( boost::beast::iequals(ext,".png" )) return "image/png";
-	if ( boost::beast::iequals(ext,".jpg" )) return "image/jpeg";
-	if ( boost::beast::iequals(ext,".gif" )) return "image/gif";
-	if ( boost::beast::iequals(ext,".bmp" )) return "image/bmp";
-	if ( boost::beast::iequals(ext,".ico" )) return "image/vnd.microsoft.icon";
-	if ( boost::beast::iequals(ext,".svg" )) return "image/svg+xml";
-	if ( boost::beast::iequals(ext,".py"  )) return "text/html";
+boost::beast::string_view mime_type( const std::string& path_ex ) {
+	if ( boost::beast::iequals(path_ex,"html")) return "text/html";
+	if ( boost::beast::iequals(path_ex,"css" )) return "text/css";
+	if ( boost::beast::iequals(path_ex,"txt" )) return "text/plain";
+	if ( boost::beast::iequals(path_ex,"js"  )) return "application/javascript";
+	if ( boost::beast::iequals(path_ex,"json")) return "application/json";
+	if ( boost::beast::iequals(path_ex,"png" )) return "image/png";
+	if ( boost::beast::iequals(path_ex,"jpg" )) return "image/jpeg";
+	if ( boost::beast::iequals(path_ex,"gif" )) return "image/gif";
+	if ( boost::beast::iequals(path_ex,"bmp" )) return "image/bmp";
+	if ( boost::beast::iequals(path_ex,"ico" )) return "image/vnd.microsoft.icon";
+	if ( boost::beast::iequals(path_ex,"svg" )) return "image/svg+xml";
 	return "application/text";
 }
 
 struct reply_t {
 	tcp_stream_t& m_stream;
-	boost::beast::error_code& m_ec;
 	boost::asio::yield_context m_yield;
 
-	reply_t( tcp_stream_t& stream, boost::system::error_code& ec, boost::asio::yield_context yield ) : m_stream(stream),m_ec(ec),m_yield(yield) {};
+	reply_t( tcp_stream_t& stream, boost::asio::yield_context yield ) : m_stream(stream),m_yield(yield) {};
 	template<class body> void operator()( boost::beast::http::response<body>&& msg ) const {
 		if ( msg.need_eof() ) log("unexpected need_eof() = true in reply_t\n");
 		boost::beast::http::response_serializer<body> s{msg};
-		boost::beast::http::async_write(m_stream,s,m_yield[m_ec]);
+		boost::beast::error_code ec;
+		boost::beast::http::async_write(m_stream,s,m_yield[ec]);
+		if (ec) log((boost::format("reply_t write error %s\n") % ec.message()).str());
 	};
 };
 
@@ -603,9 +589,11 @@ private:
 bool is_accessible( const std::string& f ) {
 	if ( f == "/index.html" ) return true;
 	if ( f == "/tekuteku.ico" ) return true;
+	if ( f == "/emoji-smile.svg" ) return true;
 	if ( f.substr(0,6) == "/tools" ) return true;
 	if ( f == "/pi.html" ) return true;
 	if ( f == "/pi-control.sh" ) return true;
+	if ( f == "/ssl-keys/tekuteku-pi.crt" ) return true;
 	return false;
 }
 
@@ -631,7 +619,7 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	auto bad_request = [&response]( const std::string& msg ){ return response(boost::beast::http::status::bad_request,msg); };
 	auto not_found = [&response]( const std::string& msg ){ return response(boost::beast::http::status::not_found,msg); };
 	auto internal_error = [&response]( const std::string& msg ){ return response(boost::beast::http::status::internal_server_error,msg); };
-	reply_t reply{stream,ec,yield};
+	reply_t reply{stream,yield};
 
 	boost::beast::http::async_read(stream,buffer,req,yield[ec]);
 	if ( ec == boost::beast::http::error::end_of_stream ) {
@@ -653,48 +641,48 @@ void exec_http_session( tcp_stream_t& stream, boost::asio::yield_context yield )
 	}
 
 	if ( req.method() != boost::beast::http::verb::get && req.method() != boost::beast::http::verb::head ) return reply(bad_request("unsupported http-method"));
-	if ( is_accessible(url.path()) == false ) return reply(not_found(url.path()));
-
-	boost::beast::http::response<boost::beast::http::empty_body> res{boost::beast::http::status::ok,req.version()};
-	res.set(boost::beast::http::field::server,m_server_name);
-	res.keep_alive(req.keep_alive());
+	if ( is_accessible(url.path()) == false ) {
+		log((boost::format("exec_http_session rejected '%s'\n") % url.path()).str());
+		return reply(not_found(url.path()));
+	}
 
 	if ( url.path_ex() == "sh" ) {
+		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::ok,req.version()};
+		res.set(boost::beast::http::field::server,m_server_name);
+		res.keep_alive(req.keep_alive());
+
 		auto cwd = boost::process::v2::process_start_dir(std::filesystem::current_path().string());
 		boost::process::v2::popen c(yield.get_executor(),"."+url.path(),url.params(),cwd);
 		std::string x;
 		for (;;) {
 			boost::system::error_code ec;
 			std::string t;
-			boost::asio::read(c,boost::asio::dynamic_buffer(t),ec);
+			boost::asio::async_read(c,boost::asio::dynamic_buffer(t),yield[ec]);
 			x += t;
 			if (ec) {
 				if ( ec == boost::asio::error::eof ) break;
-				log((boost::format("exec_http_session error=(%d,%s)\n") % ec.value() % ec.message()).str());
-				std::string m = (boost::format("error=(%d,%s)") % ec.value() % ec.message()).str();
-				return reply(internal_error(m));
+				log((boost::format("exec_http_session process %s error %s\n") % url.path() % ec.message()).str());
+				return reply(internal_error((boost::format("error %s") % ec.message()).str()));
 			}
 		}
 		x = x.substr(x.find("\n\n")+2);
 		res.set(boost::beast::http::field::content_type,"text/plain");
 		res.content_length(x.size());
-		if ( req.method() == boost::beast::http::verb::head ) return reply(std::move(res));
-		boost::beast::http::response<boost::beast::http::string_body> res_x{res};
-		res_x.body() = std::move(x);
-		return reply(std::move(res_x));
+		res.body() = std::move(x);
+		return reply(std::move(res));
 	}
 	else {
+		boost::beast::http::response<boost::beast::http::file_body> res{boost::beast::http::status::ok,req.version()};
+		res.set(boost::beast::http::field::server,m_server_name);
+		res.keep_alive(req.keep_alive());
 		std::string file_path = "." + url.path();
-		boost::beast::http::file_body::value_type body;
-		body.open(file_path.c_str(),boost::beast::file_mode::scan,ec);
+		res.body().open(file_path.c_str(),boost::beast::file_mode::scan,ec);
 		if ( ec == boost::system::errc::no_such_file_or_directory ) return reply(not_found(url.path()));
-		if (ec) return reply(internal_error(ec.message()));
-		auto const size = body.size();
-		res.set(boost::beast::http::field::content_type,mime_type(file_path));
-		res.content_length(size);
-		if ( req.method() == boost::beast::http::verb::head ) return reply(std::move(res));
-		boost::beast::http::response<boost::beast::http::file_body> res_x{res};
-		res_x.body() = std::move(body);
+		if (ec) return reply(internal_error(url.path()+'/'+ec.message()));
+		res.set(boost::beast::http::field::content_type,mime_type(url.path_ex()));
+		res.content_length(res.body().size());
+		if ( req.method() == boost::beast::http::verb::get ) return reply(std::move(res));
+		boost::beast::http::response<boost::beast::http::empty_body> res_x{res};
 		return reply(std::move(res_x));
 	}
 }

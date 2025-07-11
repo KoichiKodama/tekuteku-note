@@ -5,7 +5,7 @@ import subprocess
 import json
 
 wifi_dev = 'wlan0'
-known_connections = ['AUEWS','AUEWT','AUEWLAN','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
+known_connections = ['AUEWS','AUEWT','AUEWLAN','auewlan@sien','sim','sim-nttpc','eth0','kodama-420','kodama-home']
 
 def get_value(key,text):
 	a = text.strip().split('=')
