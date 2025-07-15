@@ -10,15 +10,15 @@
 <div class="container" style="width:400px;">
 <div class="col">
 	<table class="table table-sm table-bordered bg-secondary text-white caption-top" id="connection-table">
-	<caption class="text-center text-info m-2 fs-3 fw-bold">ラズパイネット接続</caption>
+	<caption class="text-center text-info m-2 fs-3 fw-bold">ラズパイコントロール</caption>
 	<tbody></tbody>
 	</table>
 	<div class="justify-content-center">
 	<button class="btn btn-outline-success m-2" id="pi-rescan">リスト更新</button>
-	<button class="btn btn-outline-secondary m-2" id="pi-shutdown">ラズパイ終了</button>
-	<a class="btn btn-outline-info m-2" href="./ssl-keys/tekuteku-pi.crt">ラズパイ証明書</a> <!-- download を指定すると boost::beast::http::error::end_of_stream となる -->
+	<button class="btn btn-outline-warning m-2" id="pi-shutdown">ラズパイ終了</button>
+	<a class="btn btn-outline-secondary m-2" href="./ssl-keys/tekuteku-pi.crt">ラズパイ証明書</a> <!-- download を指定すると boost::beast::http::error::end_of_stream となる -->
 	</div>
-	<div class="alert alert-dark m-2 mx-auto text-center">WiFiの接続先を変えるとラズパイとの接続は切断されることがあります。<br>その時は再接続して下さい。</div>
+	<div class="alert alert-dark m-2 mx-auto text-center">WiFiの接続先を変えると<br>ネットワークが切断されることがあります。<br>その時は再接続して下さい。</div>
 </div>
 </div>
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
@@ -28,9 +28,9 @@
 'use strict';
 
 function update_table(data) {
-	const cc = 'class="text-warning"';
+	const cc = 'class="text-info"';
 	const b0 = 'class="btn btn-sm w-100 btn-outline-light pi-connect"';
-	const b1 = 'class="btn btn-sm w-100 btn-outline-warning pi-disconnect"';
+	const b1 = 'class="btn btn-sm w-100 btn-outline-info pi-disconnect"';
 	const b2 = 'class="btn btn-sm w-100 btn-outline-light"';
 
 	let connection = data.connections;
@@ -59,7 +59,6 @@ $(document).ready( function(){
 	$('#connection-table').on('click','button.pi-connect',function(){
 		let ssid = $(this).val();
 		$(this).text('接続中');
-//		$(`td[value="${ssid}"]`).html('接続中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
 		$.ajax("./pi-control.sh?job=connect&ssid="+ssid,{method:'get',async:true,dataType:'json'})
 			.done((data)=>{ if ( data.status == 0 ) alert(data.message); })
 			.fail(()=>{ alert("通信エラーです"); })
@@ -68,7 +67,6 @@ $(document).ready( function(){
 	$('#connection-table').on('click','button.pi-disconnect',function(){
 		let ssid = $(this).val();
 		$(this).text('切断中');
-//		$(`td[value="${ssid}"]`).html('切断中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
 		$.ajax("./pi-control.sh?job=disconnect&ssid="+ssid,{method:'get',async:true,dataType:'json'})
 			.done((data)=>{ if ( data.status == 0 ) alert(data.message); })
 			.fail(()=>{ alert("通信エラーです"); })

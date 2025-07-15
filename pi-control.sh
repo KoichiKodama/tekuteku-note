@@ -3,9 +3,10 @@ import sys
 import shlex
 import subprocess
 import json
+import time
 
-wifi_dev = 'wlan0'
-known_connections = ['AUEWS','AUEWT','AUEWLAN','auewlan@sien','sim','sim-nttpc','eth0','kodama-420','kodama-home']
+wifi_dev = 'wlan1'
+known_connections = ['AUEWS','AUEWT','auewlan@sien','sim','sim-nttpc','eth0','kodama-420','kodama-home']
 
 def get_value(key,text):
 	a = text.strip().split('=')
@@ -48,7 +49,7 @@ def job_status(force_rescan):
 			status = ( 1 if device != '--' else ( 9 if kind == 'wifi' else 0 ) )
 			addr = ''
 			if status == 1:
-				cmd = 'ifconfig {0} | awk \'$1=="inet"{{print $2;}}\''.format(device)
+				cmd = 'ifconfig {0} | awk \'$1=="inet"{{print $2;}}\''.format(device if device != 'ttyUSB2' else 'ppp0')
 				r = subprocess.run(cmd,shell=True,stdout=subprocess.PIPE,encoding='utf-8')
 				addr = r.stdout.strip('\n')
 			connections[name] = connection_t(name,device,status,addr,kind)

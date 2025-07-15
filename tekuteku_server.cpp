@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-07-11";
+static std::string m_version = "build 2025-07-14";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -256,15 +256,16 @@ bool log_whiteboard() {
 
 class request_broadcast_event_t {
 public:
-	request_broadcast_event_t() : m_count(0),m_stop(false) {};
+	request_broadcast_event_t() : m_count(0),m_interval(200),m_stop(false) {};
 	virtual ~request_broadcast_event_t() {};
+	void set_interval( int msec ) { m_interval = msec; };
 	void set() { m_count++; };
 	void stop() { m_stop = true; set(); };
 	bool wait( boost::asio::yield_context yield ) {
 		boost::asio::steady_timer m_timer{yield.get_executor()};
 		for (;;) {
 			if ( m_count != 0 ) { m_count = 0; break; }
-			m_timer.expires_after(boost::asio::chrono::milliseconds(200));
+			m_timer.expires_after(boost::asio::chrono::milliseconds(m_interval));
 			boost::system::error_code ec;
 			m_timer.async_wait(yield[ec]);
 		}
@@ -274,6 +275,7 @@ public:
 	int count() const { return m_count; };
 private:
 	int m_count;
+	int m_interval;
 	bool m_stop;
 };
 boost::asio::io_context ioc_x(6);
@@ -807,6 +809,7 @@ int main( int argc, char** argv ) {
 			m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
 		}
 		if ( m_cfg.contains("magic") ) m_magic = m_cfg["magic"].get<std::string>();
+		if ( m_cfg.contains("broadcast_interval") ) request_broadcast.set_interval(m_cfg["broadcast_interval"].get<int>());
 
 		truncate_log();
 		#ifdef USE_SSL
