@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-07-14";
+static std::string m_version = "build 2025-07-16";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -537,7 +537,7 @@ struct reply_t {
 
 	reply_t( tcp_stream_t& stream, boost::asio::yield_context yield ) : m_stream(stream),m_yield(yield) {};
 	template<class body> void operator()( boost::beast::http::response<body>&& msg ) const {
-		if ( msg.need_eof() ) log("unexpected need_eof() = true in reply_t\n");
+//		if ( msg.need_eof() ) log("unexpected need_eof() = true in reply_t\n");
 		boost::beast::http::response_serializer<body> s{msg};
 		boost::beast::error_code ec;
 		boost::beast::http::async_write(m_stream,s,m_yield[ec]);
