@@ -2,7 +2,7 @@
 <html lang="ja" data-bs-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>tekuteku-pi</title>
+<title>ラズパイコントロール 2025-08-06</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
 </head>
@@ -10,7 +10,7 @@
 <div class="container" style="width:400px;">
 <div class="col">
 	<table class="table table-sm table-bordered bg-secondary text-white caption-top" id="connection-table">
-	<caption class="text-center text-info m-2 fs-3 fw-bold">ラズパイコントロール</caption>
+	<caption class="text-center text-white m-2 fs-3 fw-bold">ラズパイコントロール</caption>
 	<tbody></tbody>
 	</table>
 	<div class="justify-content-center">
@@ -36,10 +36,21 @@ function update_table(data) {
 	let connection = data.connections;
 	let s = "";
 	connection.forEach((c,i)=>{
-		switch(c.status) {
-			case 0: s += `<tr><td>${c.name}</td><td></td><td><button ${b0} value="${c.name}">接続する</button></td></tr>`; break;
-			case 1: s += `<tr><td ${cc}>${c.name}</td><td ${cc}>${c.addr}</td><td><button ${b1} value="${c.name}">切断する</button></td></tr>`; break;
-			default: s += `<tr><td>${c.name}</td><td></td><td><button ${b2} value="${c.name}" disabled>利用不可</button></td></tr>`; break;
+		switch(c.kind) {
+			case 'wifi':
+				switch(c.status) {
+					case 0: s += `<tr><td>${c.name}</td><td></td><td><button ${b0} value="${c.name}">接続する</button></td></tr>`; break;
+					case 1: s += `<tr><td ${cc}>${c.name}</td><td ${cc}>${c.addr}</td><td><button ${b1} value="${c.name}">切断する</button></td></tr>`; break;
+					default: s += `<tr><td>${c.name}</td><td></td><td><button ${b2} value="${c.name}" disabled>利用不可</button></td></tr>`; break;
+				}
+				break;
+			default:
+				switch(c.status) {
+					case 0: s += `<tr><td>${c.name}</td><td></td><td><button ${b0} value="${c.name}" disabled>　　　　</button></td></tr>`; break;
+					case 1: s += `<tr><td ${cc}>${c.name}</td><td ${cc}>${c.addr}</td><td><button ${b1} value="${c.name}" disabled>　　　　</button></td></tr>`; break;
+					default: s += `<tr><td>${c.name}</td><td></td><td><button ${b2} value="${c.name}" disabled>利用不可</button></td></tr>`; break;
+				}
+				break;
 		}
 	});
 	$('#connection-table > tbody').empty().append(s);

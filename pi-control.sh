@@ -5,6 +5,7 @@ import subprocess
 import json
 import time
 
+version = '2025-08-06'
 wifi_dev = 'wlan1'
 known_connections = ['AUEWS','AUEWT','auewlan@sien','sim','sim-nttpc','eth0','kodama-420','kodama-home']
 
@@ -46,20 +47,24 @@ def job_status(force_rescan):
 		kind = a[2]
 		device = a[3]
 		if name in connections.keys():
-			status = ( 1 if device != '--' else ( 9 if kind == 'wifi' else 0 ) )
+			status = ( 1 if device != '--' else 9 )
 			addr = ''
 			if status == 1:
-				cmd = 'ifconfig {0} | awk \'$1=="inet"{{print $2;}}\''.format(device if device != 'ttyUSB2' else 'ppp0')
+				cmd = 'nmcli con show {0} | awk \'$1=="IP4.ADDRESS[1]:"{{sub(/\/[0-9]+$/,"",$2); print $2;}}\''.format(name)
 				r = subprocess.run(cmd,shell=True,stdout=subprocess.PIPE,encoding='utf-8')
 				addr = r.stdout.strip('\n')
 			connections[name] = connection_t(name,device,status,addr,kind)
 
+	# signal >= 60 のみを利用可とする。
 	wifi = []
 	o = "-rescan yes" if force_rescan == 1 else ""
-	r = subprocess.run(shlex.split('nmcli -f SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
+	r = subprocess.run(shlex.split('nmcli -g SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
 	l = r.stdout.splitlines()
 	for s in l[1:len(l)]:
-		wifi.append(s.split()[0])
+		ss = s.split(':')
+		ssid = ss[0]
+		signal = int(ss[1])
+		if signal >= 60: wifi.append(ssid)
 
 	for c in connections.values():
 		if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
