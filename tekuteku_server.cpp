@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-07-16";
+static std::string m_version = "build 2025-08-09";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -596,6 +596,7 @@ bool is_accessible( const std::string& f ) {
 	if ( f == "/pi.html" ) return true;
 	if ( f == "/pi-control.sh" ) return true;
 	if ( f == "/ssl-keys/tekuteku-pi.crt" ) return true;
+	if ( f == "/k.html" ) return true;
 	return false;
 }
 
