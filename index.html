@@ -325,7 +325,7 @@ function recognizer_amivoice() {
 	Recorder.maxRecordingTime = 0;
 
 	function update_result(result,is_final) {
-		let text = html_encode(Result.parse(result).text);
+		let text = html_encode(amivoice_parse(result).text);
 		let a = my_split(text,35,40,'ja-JP');
 		let j=0;
 		a.forEach((x)=>{
@@ -364,7 +364,6 @@ function recognizer_amivoice() {
 	Wrp.resultUpdated = function(result){ update_result(result,false); };
 	Wrp.resultFinalized = function(result){ update_result(result,true); };
 	Wrp.eventNotified = function(event_id,event_message){};
-	Wrp.TRACE = function(message){};
 
 	function start_(){ if ( state == 0 ) { Wrp.issue(); } mic.start(); };
 	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } mic.stop(); };
