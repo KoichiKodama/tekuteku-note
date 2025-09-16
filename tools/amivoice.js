@@ -286,8 +286,6 @@ var Wrp = function() {
 		codecElement: undefined,
 		resultType: "",
 		resultTypeElement: undefined,
-		checkIntervalTime: 0,
-		checkIntervalTimeElement: undefined,
 		issuerURL: "",
 		issuerURLElement: undefined,
 		sid: null,
@@ -299,7 +297,7 @@ var Wrp = function() {
 		connect: connect_,
 		disconnect: disconnect_,
 		feedDataResume: feedDataResume_,
-		feedData: feedData_,
+//		feedData: feedData_,
 		feedDataPause: feedDataPause_,
 		isConnected: isConnected_,
 		isActive: isActive_,
@@ -383,9 +381,21 @@ var Wrp = function() {
 			}
 		};
 
-		// 音声データが録音された時に呼び出されます。
+		// 音声データが録音された時に呼び出され、認識サービスに音声データを渡す。
 		recorder_.recorded = function(data) {
-			if ( state_ === 5 ) { feedData__(data); }
+			if ( state_ === 5 ) {
+				if ( data.byteOffset >= 1 ) {
+					data = new Uint8Array(data.buffer, data.byteOffset - 1, 1 + data.length);
+					data[0] = 0x70; // 'p'
+					socket_.send(data);
+				}
+				else {
+					var newData = new Uint8Array(1 + data.length);
+					newData[0] = 0x70; // 'p'
+					newData.set(data, 1);
+					socket_.send(newData);
+				}
+			}
 		};
 	}
 
@@ -475,22 +485,19 @@ var Wrp = function() {
 		socket_.onmessage = function(event) {
 			var tag = event.data[0];
 			var body = event.data.substring(2);
-			if ( tag === 's' ) {
+			if ( tag === 's' ) { // 音声データ送信開始コマンド応答
 				if (body) {
 					if ( state_ === 2 ) {
 						state_ = 8;
-						stopCheckIntervalTimeoutTimer_();
 						if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
 						socket_.close();
 					}
 					else if ( state_ === 3 ) {
 						state_ = 23;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 					}
 					else if ( state_ === 4 ) {
 						state_ = 7;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 						if ( recorder_ ) { recorder_.pause(); }
 						else {
@@ -503,7 +510,6 @@ var Wrp = function() {
 							if ( wrp_.feedDataPauseStarted ) wrp_.feedDataPauseStarted();
 						}
 						state_ = 27;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 						if (recorder_) { recorder_.pause(); }
 						else {
@@ -515,12 +521,10 @@ var Wrp = function() {
 					}
 					else if ( state_ === 7 ) {
 						state_ = 27;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 					}
 					else if ( state_ === 34 || state_ === 36 ) {
 						state_ = 8;
-						stopCheckIntervalTimeoutTimer_();
 						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
 						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
 						socket_.close();
@@ -529,7 +533,6 @@ var Wrp = function() {
 				else {
 					if ( state_ === 4 ) {
 						state_ = 5;
-						startCheckIntervalTimeoutTimer_();
 						if (wrp_.feedDataResumeEnded) wrp_.feedDataResumeEnded();
 					}
 					else if ( state_ === 34 ) {
@@ -538,23 +541,20 @@ var Wrp = function() {
 					}
 				}
 			}
-			else if ( tag === 'p' ) {
+			else if ( tag === 'p' ) { // 音声データ送信コマンド応答
 				if (body) {
 					if ( state_ === 2 ) {
 						state_ = 8;
-						stopCheckIntervalTimeoutTimer_();
 						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
 						socket_.close();
 					}
 					else if ( state_ === 3 ) {
 						state_ = 23;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 					}
 					else if ( state_ === 4 || state_ === 5 || state_ === 6 ) {
 						if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
 						state_ = 27;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 						if (recorder_) { recorder_.pause(); }
 						else {
@@ -566,35 +566,30 @@ var Wrp = function() {
 					}
 					else if ( state_ === 7 ) {
 						state_ = 27;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 					}
 					else if ( state_ === 34 || state_ === 36 ) {
 						state_ = 8;
-						stopCheckIntervalTimeoutTimer_();
 						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
 						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
 						socket_.close();
 					}
 				}
 			}
-			else if ( tag === 'e' ) {
+			else if ( tag === 'e' ) { // 音声データ送信停止コマンド応答
 				if (body) {
 					if ( state_ === 2 ) {
 						state_ = 8;
-						stopCheckIntervalTimeoutTimer_();
 						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
 						socket_.close();
 					}
 					else if ( state_ === 3 ) {
 						state_ = 23;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 					}
 					else if ( state_ === 4 || state_ === 5 || state_ === 6 ) {
 						if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
 						state_ = 27;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 						if (recorder_) { recorder_.pause(); }
 						else {
@@ -606,12 +601,10 @@ var Wrp = function() {
 					}
 					else if ( state_ === 7 ) {
 						state_ = 27;
-						stopCheckIntervalTimeoutTimer_();
 						reason_ = {code: 3, message: body};
 					}
 					else if ( state_ === 34 || state_ === 36 ) {
 						state_ = 8;
-						stopCheckIntervalTimeoutTimer_();
 						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
 						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
 						socket_.close();
@@ -620,7 +613,6 @@ var Wrp = function() {
 				else {
 					if ( state_ === 6 ) {
 						state_ = 7;
-						stopCheckIntervalTimeoutTimer_();
 						if (recorder_) { recorder_.pause(); }
 						else {
 							state_ = 2;
@@ -629,21 +621,24 @@ var Wrp = function() {
 					}
 					else if ( state_ === 36 ) {
 						state_ = 2;
-						stopCheckIntervalTimeoutTimer_();
 						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
 						if (interlock_) { disconnect_(); }
 					}
 				}
 			}
-			else if ( tag === 'S' ) {
-				if (wrp_.utteranceStarted) wrp_.utteranceStarted(body);
-				stopCheckIntervalTimeoutTimer_();
-			}
-			else if ( tag === 'E' ) { if (wrp_.utteranceEnded) wrp_.utteranceEnded(body); }
+			// S : 発話区間開始検出通知
+			// E : 発話区間終了検出通知
+			// C : 認識処理開始通知
+			// U : 認識処理中通知
+			// A : 認識処理結果通知
+			// R : 認識処理結果通知
+			// Q : 
+			// G : サーバ内でのアクション結果通知
+
 			else if ( tag === 'C' ) { if (wrp_.resultCreated) wrp_.resultCreated(); }
 			else if ( tag === 'U' ) { if (wrp_.resultUpdated) wrp_.resultUpdated(body); }
-			else if ( tag === 'A' ) { if (wrp_.resultFinalized) wrp_.resultFinalized(body); startCheckIntervalTimeoutTimer_(); }
-			else if ( tag === 'R' ) { if (wrp_.resultFinalized) wrp_.resultFinalized("\x01\x01\x01\x01\x01" + body); startCheckIntervalTimeoutTimer_(); }
+			else if ( tag === 'A' ) { if (wrp_.resultFinalized) wrp_.resultFinalized(body); }
+			else if ( tag === 'R' ) { if (wrp_.resultFinalized) wrp_.resultFinalized("\x01\x01\x01\x01\x01" + body); }
 			else if ( tag === 'Q' ) { if (wrp_.eventNotified) wrp_.eventNotified(tag, body); }
 			else if ( tag === 'G' ) { if (wrp_.eventNotified) wrp_.eventNotified(tag, body); }
 		};
@@ -697,7 +692,6 @@ var Wrp = function() {
 		if (wrp_.authorizationElement) wrp_.authorization = wrp_.authorizationElement.value;
 		if (wrp_.codecElement) wrp_.codec = wrp_.codecElement.value;
 		if (wrp_.resultTypeElement) wrp_.resultType = wrp_.resultTypeElement.value;
-		if (wrp_.checkIntervalTimeElement) wrp_.checkIntervalTime = wrp_.checkIntervalTimeElement.value - 0;
 		var command = "s ";
 		if (wrp_.codec) { command += wrp_.codec; } else { command += "MSB16K"; }
 		if (wrp_.grammarFileNames) {
@@ -717,32 +711,11 @@ var Wrp = function() {
 		return true;
 	}
 
-	// 音声データの供給
-	function feedData_(data) {
-		if ( state_ !== 5 ) { return false; }
-		feedData__(data);
-		return true;
-	}
-	function feedData__(data) {
-		if ( data.byteOffset >= 1 ) {
-			data = new Uint8Array(data.buffer, data.byteOffset - 1, 1 + data.length);
-			data[0] = 0x70; // 'p'
-			socket_.send(data);
-		}
-		else {
-			var newData = new Uint8Array(1 + data.length);
-			newData[0] = 0x70; // 'p'
-			newData.set(data, 1);
-			socket_.send(newData);
-		}
-	}
-
 	// 音声データの供給の停止
 	function feedDataPause_() {
 		if ( state_ !== 5 ) { return false; }
 		if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted();
 		state_ = 6;
-		stopCheckIntervalTimeoutTimer_();
 		feedDataPause__();
 		return true;
 	}
@@ -754,26 +727,6 @@ var Wrp = function() {
 
 	function isConnected_() { return (state_ === 2 || state_ === 3 || state_ === 4 || state_ === 5 || state_ === 6 || state_ === 7 || state_ === 23 || state_ === 27 || state_ === 34 || state_ === 36); }
 	function isActive_() { return (state_ === 5); }
-
-	// 録音の停止を自動的に行うためのタイマの開始
-	function startCheckIntervalTimeoutTimer_() {
-		if ( wrp_.checkIntervalTime - 1000 <= 0 ) { return; }
-		stopCheckIntervalTimeoutTimer_();
-		checkIntervalTimeoutTimerId_ = setTimeout(fireCheckIntervalTimeoutTimer_, wrp_.checkIntervalTime - 1000);
-	}
-
-	// 録音の停止を自動的に行うためのタイマの停止
-	function stopCheckIntervalTimeoutTimer_() {
-		if ( checkIntervalTimeoutTimerId_ !== null ) {
-			clearTimeout(checkIntervalTimeoutTimerId_);
-			checkIntervalTimeoutTimerId_ = null;
-		}
-	}
-
-	// 録音の停止を自動的に行うためのタイマの発火
-	function fireCheckIntervalTimeoutTimer_() {
-		feedDataPause_();
-	}
 
 	// サービス認証キー文字列の発行
 	function issue_() {
@@ -837,7 +790,6 @@ var Wrp = function() {
 		return true;
 	}
 
-	if (recorder_) { wrp_.version += " " + recorder_.version; }
 	wrp_.serverURL = window.location.protocol + "//" + window.location.host + window.location.pathname;
 	wrp_.serverURL = wrp_.serverURL.substring(0, wrp_.serverURL.lastIndexOf('/') + 1);
 	if (wrp_.serverURL.endsWith("/tool/")) { wrp_.serverURL = wrp_.serverURL.substring(0, wrp_.serverURL.length - 5); }
