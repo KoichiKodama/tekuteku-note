@@ -226,7 +226,6 @@ var Wrp = function() {
 		resultUpdatedInterval: "",
 		extension: "",
 		authorization: "",
-		authorizationElement: undefined,
 		codec: "",
 		resultType: "",
 		issuerURL: "",
@@ -582,7 +581,6 @@ var Wrp = function() {
 		return true;
 	}
 	function feedDataResume__() {
-		if (wrp_.authorizationElement) wrp_.authorization = wrp_.authorizationElement.value;
 		var command = "s ";
 		if (wrp_.codec) { command += wrp_.codec; } else { command += "MSB16K"; }
 		if (wrp_.grammarFileNames) {
@@ -623,7 +621,7 @@ var Wrp = function() {
 	function issue_() {
 		if (!wrp_.sid) {
 			alert("サービス ID が設定されていません。");
-			if (wrp_.sidElement) wrp_.sidElement.focus();
+//			if (wrp_.sidElement) wrp_.sidElement.focus();
 			return false;
 		}
 		for (var i=0;i<wrp_.sid.length;i++) {
@@ -648,7 +646,7 @@ var Wrp = function() {
 		var httpRequest = new XMLHttpRequest();
 		httpRequest.addEventListener("load", function(e) {
 			if (e.target.status === 200) {
-				if (wrp_.authorizationElement) { wrp_.authorizationElement.value = e.target.response; }
+				wrp_.authorization = e.target.response;
 				if (wrp_.issueEnded) wrp_.issueEnded(e.target.response);
 			}
 			else { if (wrp_.issueEnded) wrp_.issueEnded(""); }

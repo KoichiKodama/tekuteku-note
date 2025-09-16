@@ -135,7 +135,6 @@
 </div>
 
 <div style="display:none;">
-<input id="amivoice-authorization" type="text" />
 <input type="file" id="recognition-dic-load" />
 </div>
 
@@ -317,7 +316,6 @@ function recognizer_amivoice() {
 	Wrp.spw = token["amivoice"].password;
 
 	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/nolog/";	// ログを残さない場合は /nolog を付加
-	Wrp.authorizationElement = document.getElementById('amivoice-authorization');
 	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
 	Wrp.epi = '60000';
