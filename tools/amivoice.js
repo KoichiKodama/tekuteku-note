@@ -17,9 +17,7 @@ var Recorder = function() {
 	var recorder_ = {
 		// public プロパティ
 		sampleRate: 16000,
-		sampleRateElement: undefined,
 		maxRecordingTime: 60000,
-		maxRecordingTimeElement: undefined,
 		// public メソッド
 		resume: resume_,
 		pause: pause_,
@@ -40,9 +38,6 @@ var Recorder = function() {
 	var audioProvider_;
 	var audioSamplesPerSec_;
 	var pcmData_;
-	var waveData_;
-	var waveDataBytes_;
-	var waveFile_;
 	var reason_;
 	var maxRecordingTimeTimerId_;
 
@@ -104,15 +99,13 @@ var Recorder = function() {
 		if (state_ !== -1 && state_ !== 0) { return false; }
 		if (recorder_.resumeStarted) recorder_.resumeStarted();
 		if (!window.AudioContext) {
-			if (recorder_.pauseEnded) recorder_.pauseEnded({code: 2, message: "Unsupported AudioContext class"}, waveFile_);
+			if (recorder_.pauseEnded) recorder_.pauseEnded({code: 2, message: "Unsupported AudioContext class"});
 			return true;
 		}
 		if (!navigator.mediaDevices) {
-			if (recorder_.pauseEnded) recorder_.pauseEnded({code: 2, message: "Unsupported MediaDevices class"}, waveFile_);
+			if (recorder_.pauseEnded) recorder_.pauseEnded({code: 2, message: "Unsupported MediaDevices class"});
 			return true;
 		}
-		if (recorder_.sampleRateElement) recorder_.sampleRate = recorder_.sampleRateElement.value - 0;
-		if (recorder_.maxRecordingTimeElement) recorder_.maxRecordingTime = recorder_.maxRecordingTimeElement.value - 0;
 		if (state_ === 0 && recorder_.sampleRate !== audioSamplesPerSec_) {
 			audioStream_ = null;
 			audioProvider_ = null;
@@ -130,17 +123,10 @@ var Recorder = function() {
 		if (audioSamplesPerSec_ === 0) {
 			reason_.code = 2;
 			reason_.message = "Unsupported sample rate: " + audioContext_.sampleRate + "Hz";
-			if (recorder_.pauseEnded) recorder_.pauseEnded(reason_, waveFile_);
+			if (recorder_.pauseEnded) recorder_.pauseEnded(reason_);
 			return true;
 		}
 		state_ = 1;
-		if (!recorder_.recorded) {
-			waveData_ = [];
-			waveDataBytes_ = 0;
-			waveData_.push(new ArrayBuffer(44));
-			waveDataBytes_ += 44;
-		}
-		waveFile_ = null;
 		reason_.code = 0;
 		reason_.message = "";
 		audioProcessor_.port.onmessage = audioProcessor_onaudioprocess_recorded_;
@@ -154,40 +140,7 @@ var Recorder = function() {
 						tracks[i].stop();
 					}
 					state_ = 0;
-					if (waveData_) {
-						var waveData = new DataView(waveData_[0]);
-						waveData.setUint8(0, 0x52); // 'R'
-						waveData.setUint8(1, 0x49); // 'I'
-						waveData.setUint8(2, 0x46); // 'F'
-						waveData.setUint8(3, 0x46); // 'F'
-						waveData.setUint32(4, waveDataBytes_ - 8, true);
-						waveData.setUint8(8, 0x57); // 'W'
-						waveData.setUint8(9, 0x41); // 'A'
-						waveData.setUint8(10, 0x56); // 'V'
-						waveData.setUint8(11, 0x45); // 'E'
-						waveData.setUint8(12, 0x66); // 'f'
-						waveData.setUint8(13, 0x6D); // 'm'
-						waveData.setUint8(14, 0x74); // 't'
-						waveData.setUint8(15, 0x20); // ' '
-						waveData.setUint32(16, 16, true);
-						waveData.setUint16(20, 1, true); // formatTag
-						waveData.setUint16(22, 1, true); // channels
-						waveData.setUint32(24, audioSamplesPerSec_, true); // samplesPerSec
-						waveData.setUint32(28, audioSamplesPerSec_ * 2 * 1, true); // bytesPseSec
-						waveData.setUint16(32, 2 * 1, true); // bytesPerSample
-						waveData.setUint16(34, 16, true); // bitsPerSample
-						waveData.setUint8(36, 0x64); // 'd'
-						waveData.setUint8(37, 0x61); // 'a'
-						waveData.setUint8(38, 0x74); // 't'
-						waveData.setUint8(39, 0x61); // 'a'
-						waveData.setUint32(40, waveDataBytes_ - 44, true);
-						waveFile_ = new Blob(waveData_, {type: "audio/wav"});
-						waveFile_.samplesPerSec = audioSamplesPerSec_;
-						waveFile_.samples = (waveDataBytes_ - 44) / (2 * 1);
-						waveData_ = null;
-						waveDataBytes_ = 0;
-					}
-					if (recorder_.pauseEnded) recorder_.pauseEnded(reason_, waveFile_);
+					if (recorder_.pauseEnded) recorder_.pauseEnded(reason_);
 				};
 				if (state_ === 3) {
 					state_ = 4;
@@ -207,7 +160,7 @@ var Recorder = function() {
 				state_ = 0;
 				reason_.code = 2;
 				reason_.message = error.message;
-				if (recorder_.pauseEnded) recorder_.pauseEnded(reason_, waveFile_);
+				if (recorder_.pauseEnded) recorder_.pauseEnded(reason_);
 			}
 		);
 		return true;
@@ -265,35 +218,21 @@ function amivoice_parse(result) {
 var Wrp = function() {
 	var wrp_ = {
 		serverURL: "",
-		serverURLElement: undefined,
 		grammarFileNames: "",
-		grammarFileNamesElement: undefined,
 		profileId: "",
-		profileIdElement: undefined,
 		profileWords: "",
-		profileWordsElement: undefined,
 		segmenterProperties: "",
-		segmenterPropertiesElement: undefined,
 		keepFillerToken: "",
-		keepFillerTokenElement: undefined,
 		resultUpdatedInterval: "",
-		resultUpdatedIntervalElement: undefined,
 		extension: "",
-		extensionElement: undefined,
 		authorization: "",
 		authorizationElement: undefined,
 		codec: "",
-		codecElement: undefined,
 		resultType: "",
-		resultTypeElement: undefined,
 		issuerURL: "",
-		issuerURLElement: undefined,
 		sid: null,
-		sidElement: undefined,
 		spw: null,
-		spwElement: undefined,
 		epi: null,
-		epiElement: undefined,
 		connect: connect_,
 		disconnect: disconnect_,
 		feedDataResume: feedDataResume_,
@@ -323,98 +262,90 @@ var Wrp = function() {
 	var state_ = 0;
 	var socket_;
 	var reason_;
-	var checkIntervalTimeoutTimerId_ = null;
 	var interlock_ = false;
-	var recorder_ = window.Recorder || null;
+	var recorder_ = window.Recorder;
 
-	if ( recorder_ ) {
-		// 録音の開始処理が完了した時に呼び出されます。
-		recorder_.resumeEnded = function(codec) {
-			wrp_.codec = codec;
-			if ( wrp_.codecElement ) wrp_.codecElement.value = wrp_.codec;
-			if ( state_ == 0 ) { connect_(); } 
-			else if ( state_ === 3 ) { state_ = 4; feedDataResume__(); } 
-			else if ( state_ === 13 ) { state_ = 17; recorder_.pause(); } 
-			else if ( state_ === 23 ) { state_ = 27; recorder_.pause(); }
-		};
+	if (!recorder_) console.log("error no Recorder");
 
-		// 録音の開始処理が失敗した時または録音の停止処理が完了した時に呼び出されます。
-		recorder_.pauseEnded = function(reason) {
-			if ( state_ == 0 ) {
-				if ( wrp_.feedDataResumeStarted ) wrp_.feedDataResumeStarted();
-				if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
-			}
-			else if ( state_ === 3 ) {
-				state_ = 2;
-				if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
-				if ( interlock_ ) { disconnect_(); }
-			}
-			else if ( state_ === 4 ) {
-				state_ = 34;
-				reason_ = reason;
-			}
-			else if ( state_ === 5 ) {
-				state_ = 36;
-				reason_ = reason;
-				feedDataPause__();
-			}
-			else if ( state_ === 6 ) {
-				state_ = 36;
-				reason_ = reason;
-			}
-			else if ( state_ === 7 ) {
-				state_ = 2;
-				if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
-				if ( interlock_ ) { disconnect_(); }
-			}
-			else if ( state_ === 13 || state_ === 17 ) {
-				state_ = 0;
-				if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-				if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-				interlock_ = false;
-			}
-			else if ( state_ === 23 || state_ === 27 ) {
-				state_ = 8;
-				if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-				socket_.close();
-			}
-		};
+	// 録音の開始処理が完了した時に呼び出されます。
+	recorder_.resumeEnded = function(codec) {
+		wrp_.codec = codec;
+		if ( state_ == 0 ) { connect_(); } 
+		else if ( state_ === 3 ) { state_ = 4; feedDataResume__(); } 
+		else if ( state_ === 13 ) { state_ = 17; recorder_.pause(); } 
+		else if ( state_ === 23 ) { state_ = 27; recorder_.pause(); }
+	};
 
-		// 音声データが録音された時に呼び出され、認識サービスに音声データを渡す。
-		recorder_.recorded = function(data) {
-			if ( state_ === 5 ) {
-				if ( data.byteOffset >= 1 ) {
-					data = new Uint8Array(data.buffer, data.byteOffset - 1, 1 + data.length);
-					data[0] = 0x70; // 'p'
-					socket_.send(data);
-				}
-				else {
-					var newData = new Uint8Array(1 + data.length);
-					newData[0] = 0x70; // 'p'
-					newData.set(data, 1);
-					socket_.send(newData);
-				}
+	// 録音の開始処理が失敗した時または録音の停止処理が完了した時に呼び出されます。
+	recorder_.pauseEnded = function(reason) {
+		if ( state_ == 0 ) {
+			if ( wrp_.feedDataResumeStarted ) wrp_.feedDataResumeStarted();
+			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
+		}
+		else if ( state_ === 3 ) {
+			state_ = 2;
+			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
+			if ( interlock_ ) { disconnect_(); }
+		}
+		else if ( state_ === 4 ) {
+			state_ = 34;
+			reason_ = reason;
+		}
+		else if ( state_ === 5 ) {
+			state_ = 36;
+			reason_ = reason;
+			feedDataPause__();
+		}
+		else if ( state_ === 6 ) {
+			state_ = 36;
+			reason_ = reason;
+		}
+		else if ( state_ === 7 ) {
+			state_ = 2;
+			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
+			if ( interlock_ ) { disconnect_(); }
+		}
+		else if ( state_ === 13 || state_ === 17 ) {
+			state_ = 0;
+			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
+			if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
+			interlock_ = false;
+		}
+		else if ( state_ === 23 || state_ === 27 ) {
+			state_ = 8;
+			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
+			if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
+			socket_.close();
+		}
+	};
+
+	// 音声データが録音された時に呼び出され、認識サービスに音声データを渡す。
+	recorder_.recorded = function(data) {
+		if ( state_ === 5 ) {
+			if ( data.byteOffset >= 1 ) {
+				data = new Uint8Array(data.buffer, data.byteOffset - 1, 1 + data.length);
+				data[0] = 0x70; // 'p'
+				socket_.send(data);
 			}
-		};
-	}
+			else {
+				var newData = new Uint8Array(1 + data.length);
+				newData[0] = 0x70; // 'p'
+				newData.set(data, 1);
+				socket_.send(newData);
+			}
+		}
+	};
 
 	// WebSocket のオープン
 	function connect_() {
 		if ( state_ !== 0 ) { return false; }
 		if ( wrp_.connectStarted ) wrp_.connectStarted();
-		if ( wrp_.serverURLElement ) wrp_.serverURL = wrp_.serverURLElement.value;
 		if ( !wrp_.serverURL ) {
 			if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
 			return true;
 		}
 		try {
-			if ( wrp_.serverURL.startsWith("http://") ) {
-				wrp_.serverURL = "ws://" + wrp_.serverURL.substring(7);
-			}
-			else if ( wrp_.serverURL.startsWith("https://") ) {
-				wrp_.serverURL = "wss://" + wrp_.serverURL.substring(8);
-			}
+			// serverURL は必ず wss:// で始まる。
 			socket_ = new WebSocket(wrp_.serverURL);
 		}
 		catch (e) {
@@ -449,12 +380,7 @@ var Wrp = function() {
 				state_ = 17;
 				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
 				if ( !reason_ ) { reason_ = {code: 3, message: "Disconnected from WebSocket server"}; }
-				if ( recorder_ ) { recorder_.pause(); }
-				else {
-					state_ = 0;
-					if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-					if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-				}
+				recorder_.pause();
 			}
 			else if ( state_ === 7 ) {
 				state_ = 17;
@@ -499,11 +425,7 @@ var Wrp = function() {
 					else if ( state_ === 4 ) {
 						state_ = 7;
 						reason_ = {code: 3, message: body};
-						if ( recorder_ ) { recorder_.pause(); }
-						else {
-							state_ = 2;
-							if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-						}
+						recorder_.pause();
 					}
 					else if ( state_ === 5 || state_ === 6 ) {
 						if ( state_ != 6 ) {
@@ -511,13 +433,7 @@ var Wrp = function() {
 						}
 						state_ = 27;
 						reason_ = {code: 3, message: body};
-						if (recorder_) { recorder_.pause(); }
-						else {
-							state_ = 8;
-							if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-							if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-							socket_.close();
-						}
+						recorder_.pause();
 					}
 					else if ( state_ === 7 ) {
 						state_ = 27;
@@ -556,13 +472,7 @@ var Wrp = function() {
 						if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
 						state_ = 27;
 						reason_ = {code: 3, message: body};
-						if (recorder_) { recorder_.pause(); }
-						else {
-							state_ = 8;
-							if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
-							if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-							socket_.close();
-						}
+						recorder_.pause();
 					}
 					else if ( state_ === 7 ) {
 						state_ = 27;
@@ -591,13 +501,7 @@ var Wrp = function() {
 						if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
 						state_ = 27;
 						reason_ = {code: 3, message: body};
-						if (recorder_) { recorder_.pause(); }
-						else {
-							state_ = 8;
-							if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
-							if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-							socket_.close();
-						}
+						recorder_.pause();
 					}
 					else if ( state_ === 7 ) {
 						state_ = 27;
@@ -613,11 +517,7 @@ var Wrp = function() {
 				else {
 					if ( state_ === 6 ) {
 						state_ = 7;
-						if (recorder_) { recorder_.pause(); }
-						else {
-							state_ = 2;
-							if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded({code: 0, message: ""});
-						}
+						recorder_.pause();
 					}
 					else if ( state_ === 36 ) {
 						state_ = 2;
@@ -663,7 +563,7 @@ var Wrp = function() {
 		if ( state_ === 0 ) {
 			interlock_ = true;
 			// <!-- for Safari
-			if ( recorder_ && !recorder_.isActive() ) {
+			if ( !recorder_.isActive() ) {
 				recorder_.resume();
 				return true;
 			}
@@ -673,7 +573,7 @@ var Wrp = function() {
 		if ( state_ !== 2 ) { return false; }
 		if (wrp_.feedDataResumeStarted) wrp_.feedDataResumeStarted();
 		state_ = 3;
-		if ( recorder_ && !recorder_.isActive() ) {
+		if ( !recorder_.isActive() ) {
 			recorder_.resume();
 			return true;
 		}
@@ -682,16 +582,7 @@ var Wrp = function() {
 		return true;
 	}
 	function feedDataResume__() {
-		if (wrp_.grammarFileNamesElement) wrp_.grammarFileNames = wrp_.grammarFileNamesElement.value;
-		if (wrp_.profileIdElement) wrp_.profileId = wrp_.profileIdElement.value;
-		if (wrp_.profileWordsElement) wrp_.profileWords = wrp_.profileWordsElement.value;
-		if (wrp_.segmenterPropertiesElement) wrp_.segmenterProperties = wrp_.segmenterPropertiesElement.value;
-		if (wrp_.keepFillerTokenElement) wrp_.keepFillerToken = wrp_.keepFillerTokenElement.value;
-		if (wrp_.resultUpdatedIntervalElement) wrp_.resultUpdatedInterval = wrp_.resultUpdatedIntervalElement.value;
-		if (wrp_.extensionElement) wrp_.extension = wrp_.extensionElement.value;
 		if (wrp_.authorizationElement) wrp_.authorization = wrp_.authorizationElement.value;
-		if (wrp_.codecElement) wrp_.codec = wrp_.codecElement.value;
-		if (wrp_.resultTypeElement) wrp_.resultType = wrp_.resultTypeElement.value;
 		var command = "s ";
 		if (wrp_.codec) { command += wrp_.codec; } else { command += "MSB16K"; }
 		if (wrp_.grammarFileNames) {
@@ -730,10 +621,6 @@ var Wrp = function() {
 
 	// サービス認証キー文字列の発行
 	function issue_() {
-		if (wrp_.issuerURLElement) wrp_.issuerURL = wrp_.issuerURLElement.value;
-		if (wrp_.sidElement) wrp_.sid = wrp_.sidElement.value;
-		if (wrp_.spwElement) wrp_.spw = wrp_.spwElement.value;
-		if (wrp_.epiElement) wrp_.epi = wrp_.epiElement.value;
 		if (!wrp_.sid) {
 			alert("サービス ID が設定されていません。");
 			if (wrp_.sidElement) wrp_.sidElement.focus();
@@ -741,32 +628,19 @@ var Wrp = function() {
 		}
 		for (var i=0;i<wrp_.sid.length;i++) {
 			var c = wrp_.sid.charCodeAt(i);
-			if (!(c >= 0x30 && c <= 0x39 || c >= 0x61 && c <= 0x7A || c >= 0x41 && c <= 0x5A || c === 0x2D || c === 0x5F)) {
-				if (wrp_.sidElement) alert("サービス ID に許されていない文字が使用されています。");
-				if (wrp_.sidElement) wrp_.sidElement.focus();
-				return false;
-			}
+			if (!(c >= 0x30 && c <= 0x39 || c >= 0x61 && c <= 0x7A || c >= 0x41 && c <= 0x5A || c === 0x2D || c === 0x5F)) { return false; }
 		}
 		if (!wrp_.spw) {
 			alert("サービスパスワードが設定されていません。");
-			if (wrp_.spwElement) wrp_.spwElement.focus();
 			return false;
 		}
 		for (var i=0;i<wrp_.spw.length;i++) {
 			var c = wrp_.spw.charCodeAt(i);
-			if ( c < 0x20 || c > 0x7E ) {
-				if (wrp_.spwElement) alert("サービスパスワードに許されていない文字が使用されています。");
-				if (wrp_.spwElement) wrp_.spwElement.focus();
-				return false;
-			}
+			if ( c < 0x20 || c > 0x7E ) { return false; }
 		}
 		for (var i=0;i<wrp_.epi.length;i++) {
 			var c = wrp_.epi.charCodeAt(i);
-			if ( c < 0x30 || c > 0x39 ) {
-				if (wrp_.epiElement) alert("有効期限に許されていない文字が使用されています。");
-				if (wrp_.epiElement) wrp_.epiElement.focus();
-				return false;
-			}
+			if ( c < 0x30 || c > 0x39 ) { return false; }
 		}
 		if (wrp_.issueStarted) wrp_.issueStarted();
 		var searchParams = "sid=" + encodeURIComponent(wrp_.sid) + "&spw=" + encodeURIComponent(wrp_.spw);
@@ -774,9 +648,7 @@ var Wrp = function() {
 		var httpRequest = new XMLHttpRequest();
 		httpRequest.addEventListener("load", function(e) {
 			if (e.target.status === 200) {
-				if (wrp_.serviceAuthorizationElement) { wrp_.serviceAuthorizationElement.value = e.target.response; }
-				else if (wrp_.authorizationElement) { wrp_.authorizationElement.value = e.target.response; }
-				else { wrp_.serviceAuthorization = e.target.response; }
+				if (wrp_.authorizationElement) { wrp_.authorizationElement.value = e.target.response; }
 				if (wrp_.issueEnded) wrp_.issueEnded(e.target.response);
 			}
 			else { if (wrp_.issueEnded) wrp_.issueEnded(""); }
