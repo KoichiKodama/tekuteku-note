@@ -15,14 +15,10 @@ var Recorder = function() {
 
 	// public オブジェクト
 	var recorder_ = {
-		// public プロパティ
 		sampleRate: 16000,
-		maxRecordingTime: 60000,
-		// public メソッド
 		resume: resume_,
 		pause: pause_,
 		isActive: isActive_,
-		// イベントハンドラ
 		resumeStarted: undefined,
 		resumeEnded: undefined,
 		recorded: undefined,
@@ -39,7 +35,6 @@ var Recorder = function() {
 	var audioSamplesPerSec_;
 	var pcmData_;
 	var reason_;
-	var maxRecordingTimeTimerId_;
 
 	function trim(val,valmin,valmax) {
 		if ( val < valmin ) return valmin;
@@ -69,7 +64,7 @@ var Recorder = function() {
 			"  }",
 			"})"
 		], {type: 'application/javascript'})));
-		audioProcessor_ = new AudioWorkletNode(audioContext_, 'audioWorkletProcessor');
+		audioProcessor_ = new AudioWorkletNode(audioContext_,'audioWorkletProcessor');
 		audioProcessor_.bufferSize = 128;
 		audioProcessor_onaudioprocess_recorded_ = function(event) {
 			if ( state_ === 0 ) return; // for AudioWorklet
@@ -81,7 +76,7 @@ var Recorder = function() {
 				pcmData_[pcmDataIndex++] = (pcm >> 8) & 0xFF;
 				pcmData_[pcmDataIndex++] = (pcm     ) & 0xFF;
 			}
-			if (recorder_.recorded) recorder_.recorded(pcmData_.subarray(pcmDataOffset,pcmDataIndex));
+			recorder_.recorded?.(pcmData_.subarray(pcmDataOffset,pcmDataIndex));
 			if (state_ === 3) {
 				state_ = 4;
 				audioStream_.stopTracks(); audioStream_ = undefined;
@@ -89,21 +84,20 @@ var Recorder = function() {
 				audioProcessor_.disconnect();
 			}
 		};
-		pcmData_ = new Uint8Array(1 + 16 + audioProcessor_.bufferSize * 2);
+		pcmData_ = new Uint8Array(1+16+audioProcessor_.bufferSize*2);
 		reason_ = {code: 0, message: ""};
-		maxRecordingTimeTimerId_ = null;
 	}
 
 	// 録音の開始
 	async function resume_() {
-		if (state_ !== -1 && state_ !== 0) { return false; }
-		if (recorder_.resumeStarted) recorder_.resumeStarted();
+		if (state_ !== -1 && state_ !== 0) return false;
+		recorder_.resumeStarted?.();
 		if (!window.AudioContext) {
-			if (recorder_.pauseEnded) recorder_.pauseEnded({code: 2, message: "Unsupported AudioContext class"});
+			recorder_.pauseEnded?.({code: 2, message: "Unsupported AudioContext class"});
 			return true;
 		}
 		if (!navigator.mediaDevices) {
-			if (recorder_.pauseEnded) recorder_.pauseEnded({code: 2, message: "Unsupported MediaDevices class"});
+			recorder_.pauseEnded?.({code: 2, message: "Unsupported MediaDevices class"});
 			return true;
 		}
 		if (state_ === 0 && recorder_.sampleRate !== audioSamplesPerSec_) {
@@ -123,24 +117,21 @@ var Recorder = function() {
 		if (audioSamplesPerSec_ === 0) {
 			reason_.code = 2;
 			reason_.message = "Unsupported sample rate: " + audioContext_.sampleRate + "Hz";
-			if (recorder_.pauseEnded) recorder_.pauseEnded(reason_);
+			recorder_.pauseEnded?.(reason_);
 			return true;
 		}
 		state_ = 1;
 		reason_.code = 0;
 		reason_.message = "";
 		audioProcessor_.port.onmessage = audioProcessor_onaudioprocess_recorded_;
-		navigator.mediaDevices.getUserMedia(
-			{audio: {echoCancellation: false}, video: false}
-		).then(
+		navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false},video: false})
+		.then(
 			function(audioStream) {
 				audioStream.stopTracks = function() {
 					var tracks = audioStream.getTracks();
-					for (var i = 0; i < tracks.length; i++) {
-						tracks[i].stop();
-					}
+					for (var i=0;i<tracks.length;i++) { tracks[i].stop(); }
 					state_ = 0;
-					if (recorder_.pauseEnded) recorder_.pauseEnded(reason_);
+					recorder_.pauseEnded?.(reason_);
 				};
 				if (state_ === 3) {
 					state_ = 4;
@@ -152,59 +143,28 @@ var Recorder = function() {
 				audioProvider_ = audioContext_.createMediaStreamSource(audioStream_);
 				audioProvider_.connect(audioProcessor_);
 				audioProcessor_.connect(audioContext_.destination);
-				startMaxRecordingTimeTimer_();
-				if (recorder_.resumeEnded) recorder_.resumeEnded("MSB" + (audioSamplesPerSec_ / 1000 | 0) + "K");
-			}
-		).catch(
+				recorder_.resumeEnded?.("MSB"+(audioSamplesPerSec_/1000|0)+"K");
+			})
+		.catch(
 			function(error) {
 				state_ = 0;
 				reason_.code = 2;
 				reason_.message = error.message;
-				if (recorder_.pauseEnded) recorder_.pauseEnded(reason_);
-			}
-		);
+				recorder_.pauseEnded?.(reason_);
+			});
 		return true;
 	}
 
 	// 録音の停止
 	function pause_() {
-		if (state_ !== 2) {
-			return false;
-		}
+		if ( state_ !== 2 ) return false;
 		state_ = 3;
-		if (recorder_.pauseStarted) recorder_.pauseStarted();
-		stopMaxRecordingTimeTimer_();
+		recorder_.pauseStarted?.();
 		return true;
 	}
 
-	// 録音中かどうかの取得
 	function isActive_() { return (state_ === 2); }
 
-	// 録音の停止を自動的に行うためのタイマの開始
-	function startMaxRecordingTimeTimer_() {
-		if (recorder_.maxRecordingTime <= 0) {
-			return;
-		}
-		stopMaxRecordingTimeTimer_();
-		maxRecordingTimeTimerId_ = setTimeout(fireMaxRecordingTimeTimer_, recorder_.maxRecordingTime);
-	}
-
-	// 録音の停止を自動的に行うためのタイマの停止
-	function stopMaxRecordingTimeTimer_() {
-		if (maxRecordingTimeTimerId_ !== null) {
-			clearTimeout(maxRecordingTimeTimerId_);
-			maxRecordingTimeTimerId_ = null;
-		}
-	}
-
-	// 録音の停止を自動的に行うためのタイマの発火
-	function fireMaxRecordingTimeTimer_() {
-		reason_.code = 1;
-		reason_.message = "Exceeded max recording time";
-		pause_();
-	}
-
-	// public オブジェクトの返却
 	return recorder_;
 }();
 
@@ -232,8 +192,8 @@ var Wrp = function() {
 		sid: null,
 		spw: null,
 		epi: null,
-		connect: connect_,
-		disconnect: disconnect_,
+//		connect: connect_,
+//		disconnect: disconnect_,
 		feedDataResume: feedDataResume_,
 //		feedData: feedData_,
 		feedDataPause: feedDataPause_,
@@ -258,6 +218,28 @@ var Wrp = function() {
 		issueEnded: undefined 
 	};
 
+	// 使い方
+	// (1) issue()
+	//		-> state=0 interlock_=false
+	// (2) feedDataResume()
+	//		-> feedDataResume_ interlock_=true
+	// 		-> recorder_.resume() -> recorder_.resumeEnded 
+	// 		-> connect_ state=1
+	// 		-> socket_.on_open state=2
+	// 		-> feedDataResume_ state=3
+	// 		-> recorder.resume() 
+	// 		-> state=4 
+	// 		-> feedDataResume__ 
+	// 		-> on_meesage "s" no-body stete=5
+	// (3) feedDataPause()
+	// 		-> stete=6 
+	// 		-> feedDataPause__ 
+	// 		-> on_message "e" no-body state=7
+	// 		-> recorder.pause() 
+	// 		-> recorder.pauseEnded state=2 
+	// 		-> disconnect_ state=8 
+	// 		-> on_close state=0
+
 	var state_ = 0;
 	var socket_;
 	var reason_;
@@ -269,262 +251,78 @@ var Wrp = function() {
 	// 録音の開始処理が完了した時に呼び出されます。
 	recorder_.resumeEnded = function(codec) {
 		wrp_.codec = codec;
-		if ( state_ == 0 ) { connect_(); } 
-		else if ( state_ === 3 ) { state_ = 4; feedDataResume__(); } 
-		else if ( state_ === 13 ) { state_ = 17; recorder_.pause(); } 
-		else if ( state_ === 23 ) { state_ = 27; recorder_.pause(); }
+		switch (state_) {
+		case 0: connect_(); break;
+		case 3: state_ = 4; feedDataResume__(); break;
+		case 13: state_ = 17; recorder_.pause(); break;
+		case 23: state_ = 27; recorder_.pause(); break;
+		}
 	};
 
 	// 録音の開始処理が失敗した時または録音の停止処理が完了した時に呼び出されます。
 	recorder_.pauseEnded = function(reason) {
-		if ( state_ == 0 ) {
-			if ( wrp_.feedDataResumeStarted ) wrp_.feedDataResumeStarted();
-			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
-		}
-		else if ( state_ === 3 ) {
-			state_ = 2;
-			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
-			if ( interlock_ ) { disconnect_(); }
-		}
-		else if ( state_ === 4 ) {
-			state_ = 34;
-			reason_ = reason;
-		}
-		else if ( state_ === 5 ) {
-			state_ = 36;
-			reason_ = reason;
-			feedDataPause__();
-		}
-		else if ( state_ === 6 ) {
-			state_ = 36;
-			reason_ = reason;
-		}
-		else if ( state_ === 7 ) {
-			state_ = 2;
-			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason);
-			if ( interlock_ ) { disconnect_(); }
-		}
-		else if ( state_ === 13 || state_ === 17 ) {
-			state_ = 0;
-			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-			if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-			interlock_ = false;
-		}
-		else if ( state_ === 23 || state_ === 27 ) {
-			state_ = 8;
-			if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-			if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-			socket_.close();
+		switch (state_) {
+		case 0: wrp_.feedDataResumeStarted?.(); wrp_.feedDataPauseEnded?.(reason); break;
+		case 3:
+		case 7: state_ = 2; wrp_.feedDataPauseEnded?.(reason); if ( interlock_ ) disconnect_(); break;
+		case 4: state_ = 34; reason_ = reason; break;
+		case 5: state_ = 36; reason_ = reason; feedDataPause__(); break;
+		case 6: state_ = 36; reason_ = reason; break;
+		case 13:
+		case 17: state_ = 0; wrp_.feedDataPauseEnded?.(reason_); wrp_.disconnectEnded?.(); interlock_ = false; break;
+		case 23:
+		case 27: state_ = 8; wrp_.feedDataPauseEnded?.(reason_); wrp_.disconnectStarted?.(); socket_.close(); break;
 		}
 	};
 
 	// 音声データが録音された時に呼び出され、認識サービスに音声データを渡す。
 	recorder_.recorded = function(data) {
-		if ( state_ === 5 ) {
-			if ( data.byteOffset >= 1 ) {
-				data = new Uint8Array(data.buffer, data.byteOffset - 1, 1 + data.length);
-				data[0] = 0x70; // 'p'
-				socket_.send(data);
-			}
-			else {
-				var newData = new Uint8Array(1 + data.length);
-				newData[0] = 0x70; // 'p'
-				newData.set(data, 1);
-				socket_.send(newData);
-			}
+		if ( state_ !== 5 ) return;
+		if ( data.byteOffset >= 1 ) {
+			data = new Uint8Array(data.buffer,data.byteOffset-1,1+data.length);
+			data[0] = 0x70; // 'p'
+			socket_.send(data);
+		}
+		else {
+			var newData = new Uint8Array(1+data.length);
+			newData[0] = 0x70; // 'p'
+			newData.set(data,1);
+			socket_.send(newData);
 		}
 	};
 
 	// WebSocket のオープン
 	function connect_() {
-		if ( state_ !== 0 ) { return false; }
-		if ( wrp_.connectStarted ) wrp_.connectStarted();
-		if ( !wrp_.serverURL ) {
-			if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-			return true;
-		}
+		if ( state_ !== 0 ) return false;
+		wrp_.connectStarted?.();
+		if ( !wrp_.serverURL ) { wrp_.disconnectEnded?.(); return true; }
 		try {
-			// serverURL は必ず wss:// で始まる。
-			socket_ = new WebSocket(wrp_.serverURL);
+			socket_ = new WebSocket(wrp_.serverURL); // serverURL は必ず wss:// で始まる。
 		}
-		catch (e) {
-			if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-			return true;
-		}
+		catch (e) { wrp_.disconnectEnded?.(); return true; }
 		state_ = 1;
-		socket_.onopen = function(event) {
-			state_ = 2;
-			if ( wrp_.connectEnded ) wrp_.connectEnded();
-			if ( interlock_ ) { feedDataResume_(); }
-		};
+
+		socket_.onopen = function(event) { state_ = 2; wrp_.connectEnded?.(); if ( interlock_ ) feedDataResume_(); };
+
 		socket_.onclose = function(event) {
-			if ( state_ === 1 ) {
-				state_ = 0;
-				if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-				interlock_ = false;
-			}
-			else if ( state_ === 2 ) {
-				state_ = 0;
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-				if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-				interlock_ = false;
-			}
-			else if ( state_ === 3 ) {
-				state_ = 13;
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-				if ( !reason_ ) { reason_ = {code: 3, message: "Disconnected from WebSocket server"}; }
-			}
-			else if ( state_ === 4 || state_ === 5 || state_ === 6 ) {
-				if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
-				state_ = 17;
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-				if ( !reason_ ) { reason_ = {code: 3, message: "Disconnected from WebSocket server"}; }
-				recorder_.pause();
-			}
-			else if ( state_ === 7 ) {
-				state_ = 17;
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-				if ( !reason_ ) { reason_ = {code: 3, message: "Disconnected from WebSocket server"}; }
-			}
-			else if ( state_ === 8 ) {
-				state_ = 0;
-				if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-				interlock_ = false;
-			}
-			else if ( state_ === 23 ) {
-				state_ = 13;
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-			}
-			else if ( state_ === 27 ) {
-				state_ = 17;
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-			}
-			else if ( state_ === 34 || state_ === 36 ) {
-				state_ = 0;
-				if ( wrp_.feedDataPauseEnded ) wrp_.feedDataPauseEnded(reason_);
-				if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-				if ( wrp_.disconnectEnded ) wrp_.disconnectEnded();
-				interlock_ = false;
+			switch(state_) {
+			case 1: state_ = 0; wrp_.disconnectEnded?.(); interlock_ = false; break;
+			case 2: state_ = 0; wrp_.disconnectStarted?.(); wrp_.disconnectEnded?.(); interlock_ = false; break;
+			case 3: state_ = 13; wrp_.disconnectStarted?.(); if ( !reason_ ) reason_ = {code: 3, message: "Disconnected from WebSocket server"}; break;
+			case 4:
+			case 5: wrp_.feedDataPauseStarted?.();
+			case 6: state_ = 17; wrp_.disconnectStarted?.(); if ( !reason_ ) reason_ = {code: 3, message: "Disconnected from WebSocket server"}; recorder_.pause(); break;
+			case 7: state_ = 17; wrp_.disconnectStarted?.(); if ( !reason_ ) reason_ = {code: 3, message: "Disconnected from WebSocket server"}; break;
+			case 8: state_ = 0; wrp_.disconnectEnded?.(); interlock_ = false; break;
+			case 23: state_ = 13; wrp_.disconnectStarted?.(); break;
+			case 27: state_ = 17; wrp_.disconnectStarted?.(); break;
+			case 34:
+			case 36: state_ = 0; wrp_.feedDataPauseEnded?.(reason_); wrp_.disconnectStarted?.(); wrp_.disconnectEnded?.(); interlock_ = false; break;
 			}
 		};
+
 		socket_.onmessage = function(event) {
 			var tag = event.data[0];
-			var body = event.data.substring(2);
-			if ( tag === 's' ) { // 音声データ送信開始コマンド応答
-				if (body) {
-					if ( state_ === 2 ) {
-						state_ = 8;
-						if ( wrp_.disconnectStarted ) wrp_.disconnectStarted();
-						socket_.close();
-					}
-					else if ( state_ === 3 ) {
-						state_ = 23;
-						reason_ = {code: 3, message: body};
-					}
-					else if ( state_ === 4 ) {
-						state_ = 7;
-						reason_ = {code: 3, message: body};
-						recorder_.pause();
-					}
-					else if ( state_ === 5 || state_ === 6 ) {
-						if ( state_ != 6 ) {
-							if ( wrp_.feedDataPauseStarted ) wrp_.feedDataPauseStarted();
-						}
-						state_ = 27;
-						reason_ = {code: 3, message: body};
-						recorder_.pause();
-					}
-					else if ( state_ === 7 ) {
-						state_ = 27;
-						reason_ = {code: 3, message: body};
-					}
-					else if ( state_ === 34 || state_ === 36 ) {
-						state_ = 8;
-						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
-						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-						socket_.close();
-					}
-				}
-				else {
-					if ( state_ === 4 ) {
-						state_ = 5;
-						if (wrp_.feedDataResumeEnded) wrp_.feedDataResumeEnded();
-					}
-					else if ( state_ === 34 ) {
-						state_ = 36;
-						feedDataPause__();
-					}
-				}
-			}
-			else if ( tag === 'p' ) { // 音声データ送信コマンド応答
-				if (body) {
-					if ( state_ === 2 ) {
-						state_ = 8;
-						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-						socket_.close();
-					}
-					else if ( state_ === 3 ) {
-						state_ = 23;
-						reason_ = {code: 3, message: body};
-					}
-					else if ( state_ === 4 || state_ === 5 || state_ === 6 ) {
-						if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
-						state_ = 27;
-						reason_ = {code: 3, message: body};
-						recorder_.pause();
-					}
-					else if ( state_ === 7 ) {
-						state_ = 27;
-						reason_ = {code: 3, message: body};
-					}
-					else if ( state_ === 34 || state_ === 36 ) {
-						state_ = 8;
-						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
-						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-						socket_.close();
-					}
-				}
-			}
-			else if ( tag === 'e' ) { // 音声データ送信停止コマンド応答
-				if (body) {
-					if ( state_ === 2 ) {
-						state_ = 8;
-						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-						socket_.close();
-					}
-					else if ( state_ === 3 ) {
-						state_ = 23;
-						reason_ = {code: 3, message: body};
-					}
-					else if ( state_ === 4 || state_ === 5 || state_ === 6 ) {
-						if ( state_ != 6 ) { if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted(); }
-						state_ = 27;
-						reason_ = {code: 3, message: body};
-						recorder_.pause();
-					}
-					else if ( state_ === 7 ) {
-						state_ = 27;
-						reason_ = {code: 3, message: body};
-					}
-					else if ( state_ === 34 || state_ === 36 ) {
-						state_ = 8;
-						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
-						if (wrp_.disconnectStarted) wrp_.disconnectStarted();
-						socket_.close();
-					}
-				}
-				else {
-					if ( state_ === 6 ) {
-						state_ = 7;
-						recorder_.pause();
-					}
-					else if ( state_ === 36 ) {
-						state_ = 2;
-						if (wrp_.feedDataPauseEnded) wrp_.feedDataPauseEnded(reason_);
-						if (interlock_) { disconnect_(); }
-					}
-				}
-			}
 			// S : 発話区間開始検出通知
 			// E : 発話区間終了検出通知
 			// C : 認識処理開始通知
@@ -533,14 +331,71 @@ var Wrp = function() {
 			// R : 認識処理結果通知
 			// Q : 
 			// G : サーバ内でのアクション結果通知
+			var body = event.data.substring(2);
+			switch (tag) {
+			case 's': // 音声データ送信開始コマンド応答
+				if (body) {
+					switch (state_) {
+					case 2: state_ =  8; wrp_.disconnectStarted?.(); socket_.close(); break;
+					case 3: state_ = 23; reason_ = {code: 3, message: body}; break;
+					case 4: state_ =  7; reason_ = {code: 3, message: body}; recorder_.pause(); break;
+					case 5: wrp_.feedDataPauseStarted?.(); // 次の case 6 も実行する。
+					case 6: state_ = 27; reason_ = {code: 3, message: body}; recorder_.pause(); break;
+					case 7: state_ = 27; reason_ = {code: 3, message: body}; break;
+					case 34:
+					case 36: state_ = 8; wrp_.feedDataPauseEnded?.(reason_); wrp_.disconnectStarted?.(); socket_.close(); break;
+					}
+				}
+				else {
+					switch(state_) {
+					case  4: state_ = 5; wrp_.feedDataResumeEnded?.(); break;
+					case 34: state_ = 36; feedDataPause__(); break;
+					}
+				}
+				break;
+			case 'p': // 音声データ送信コマンド応答
+				if (body) {
+					switch (state_) {
+					case 2: state_ = 8; wrp_.disconnectStarted?.(); socket_.close(); break;
+					case 3: state_ = 23; reason_ = {code: 3, message: body}; break;
+					case 4:
+					case 5: wrp_.feedDataPauseStarted?.(); // 次の case 6 も実行する。
+					case 6: state_ = 27; reason_ = {code: 3, message: body}; recorder_.pause(); break;
+					case 7: state_ = 27; reason_ = {code: 3, message: body}; break;
+					case 34:
+					case 36: state_ = 8; wrp_.feedDataPauseEnded?.(reason_); wrp_.disconnectStarted?.(); socket_.close(); break;
+					}
+				}
+				break;
+			case 'e': // 音声データ送信停止コマンド応答
+				if (body) {
+					switch(state_) {
+					case 2: state_ =  8; wrp_.disconnectStarted?.(); socket_.close(); break;
+					case 3: state_ = 23; reason_ = {code: 3, message: body}; break;
+					case 4:
+					case 5: wrp_.feedDataPauseStarted?.(); // 次の case 6 も実行する。
+					case 6: state_ = 27; reason_ = {code: 3, message: body}; recorder_.pause(); break;
+					case 7: state_ = 27; reason_ = {code: 3, message: body}; break;
+					case 34:
+					case 36: state_ = 8; wrp_.feedDataPauseEnded?.(reason_); wrp_.disconnectStarted?.(); socket_.close(); break;
+					}
+				}
+				else {
+					switch (state_) {
+					case  6: state_ = 7; recorder_.pause(); break;
+					case 36: state_ = 2; wrp_.feedDataPauseEnded?.(reason_); if (interlock_) disconnect_(); break;
+					}
+				}
+				break;
+			case 'C': wrp_.resultCreated?.(); break;
+			case 'U': wrp_.resultUpdated?.(body); break;
+			case 'A': wrp_.resultFinalized?.(body); break;
+			case 'R': wrp_.resultFinalized?.("\x01\x01\x01\x01\x01" + body); break;
+			case 'Q': wrp_.eventNotified?.(tag, body); break;
+			case 'G': wrp_.eventNotified?.(tag, body); break;
+			}
+		}
 
-			else if ( tag === 'C' ) { if (wrp_.resultCreated) wrp_.resultCreated(); }
-			else if ( tag === 'U' ) { if (wrp_.resultUpdated) wrp_.resultUpdated(body); }
-			else if ( tag === 'A' ) { if (wrp_.resultFinalized) wrp_.resultFinalized(body); }
-			else if ( tag === 'R' ) { if (wrp_.resultFinalized) wrp_.resultFinalized("\x01\x01\x01\x01\x01" + body); }
-			else if ( tag === 'Q' ) { if (wrp_.eventNotified) wrp_.eventNotified(tag, body); }
-			else if ( tag === 'G' ) { if (wrp_.eventNotified) wrp_.eventNotified(tag, body); }
-		};
 		reason_ = null;
 		return true;
 	}
@@ -551,7 +406,7 @@ var Wrp = function() {
 			return feedDataPause_();
 		}
 		if ( state_ !== 2 ) { return false; }
-		if (wrp_.disconnectStarted) wrp_.disconnectStarted();
+		wrp_.disconnectStarted?.();
 		state_ = 8;
 		socket_.close();
 		return true;
@@ -561,21 +416,13 @@ var Wrp = function() {
 	function feedDataResume_() {
 		if ( state_ === 0 ) {
 			interlock_ = true;
-			// <!-- for Safari
-			if ( !recorder_.isActive() ) {
-				recorder_.resume();
-				return true;
-			}
-			// -->
+			if ( !recorder_.isActive() ) { recorder_.resume(); return true; } // for Safari
 			return connect_();
 		}
 		if ( state_ !== 2 ) { return false; }
-		if (wrp_.feedDataResumeStarted) wrp_.feedDataResumeStarted();
+		wrp_.feedDataResumeStarted?.();
 		state_ = 3;
-		if ( !recorder_.isActive() ) {
-			recorder_.resume();
-			return true;
-		}
+		if ( !recorder_.isActive() ) { recorder_.resume(); return true; }
 		state_ = 4;
 		feedDataResume__();
 		return true;
@@ -603,7 +450,7 @@ var Wrp = function() {
 	// 音声データの供給の停止
 	function feedDataPause_() {
 		if ( state_ !== 5 ) { return false; }
-		if (wrp_.feedDataPauseStarted) wrp_.feedDataPauseStarted();
+		wrp_.feedDataPauseStarted?.();
 		state_ = 6;
 		feedDataPause__();
 		return true;
@@ -619,43 +466,36 @@ var Wrp = function() {
 
 	// サービス認証キー文字列の発行
 	function issue_() {
-		if (!wrp_.sid) {
-			alert("サービス ID が設定されていません。");
-//			if (wrp_.sidElement) wrp_.sidElement.focus();
-			return false;
-		}
+		if (!wrp_.sid) { console.log("サービス ID が設定されていません。"); return false; }
 		for (var i=0;i<wrp_.sid.length;i++) {
 			var c = wrp_.sid.charCodeAt(i);
-			if (!(c >= 0x30 && c <= 0x39 || c >= 0x61 && c <= 0x7A || c >= 0x41 && c <= 0x5A || c === 0x2D || c === 0x5F)) { return false; }
+			if (!(c >= 0x30 && c <= 0x39 || c >= 0x61 && c <= 0x7A || c >= 0x41 && c <= 0x5A || c === 0x2D || c === 0x5F)) return false;
 		}
-		if (!wrp_.spw) {
-			alert("サービスパスワードが設定されていません。");
-			return false;
-		}
+		if (!wrp_.spw) { console.log("サービスパスワードが設定されていません。"); return false; }
 		for (var i=0;i<wrp_.spw.length;i++) {
 			var c = wrp_.spw.charCodeAt(i);
-			if ( c < 0x20 || c > 0x7E ) { return false; }
+			if ( c < 0x20 || c > 0x7E ) return false;
 		}
 		for (var i=0;i<wrp_.epi.length;i++) {
 			var c = wrp_.epi.charCodeAt(i);
-			if ( c < 0x30 || c > 0x39 ) { return false; }
+			if ( c < 0x30 || c > 0x39 ) return false;
 		}
-		if (wrp_.issueStarted) wrp_.issueStarted();
+		wrp_.issueStarted?.();
 		var searchParams = "sid=" + encodeURIComponent(wrp_.sid) + "&spw=" + encodeURIComponent(wrp_.spw);
 		if (wrp_.epi) { searchParams += "&epi=" + encodeURIComponent(wrp_.epi); }
 		var httpRequest = new XMLHttpRequest();
 		httpRequest.addEventListener("load", function(e) {
 			if (e.target.status === 200) {
 				wrp_.authorization = e.target.response;
-				if (wrp_.issueEnded) wrp_.issueEnded(e.target.response);
+				wrp_.issueEnded?.(e.target.response);
 			}
-			else { if (wrp_.issueEnded) wrp_.issueEnded(""); }
+			else { wrp_.issueEnded?.(""); }
 		});
-		httpRequest.addEventListener("error", function(e) { if (wrp_.issueEnded) wrp_.issueEnded(""); });
-		httpRequest.addEventListener("abort", function(e) { if (wrp_.issueEnded) wrp_.issueEnded(""); });
-		httpRequest.addEventListener("timeout", function(e) { if (wrp_.issueEnded) wrp_.issueEnded(""); });
-		httpRequest.open("POST", wrp_.issuerURL, true);
-		httpRequest.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+		httpRequest.addEventListener("error", function(e) { wrp_.issueEnded?.(""); });
+		httpRequest.addEventListener("abort", function(e) { wrp_.issueEnded?.(""); });
+		httpRequest.addEventListener("timeout", function(e) { wrp_.issueEnded?.(""); });
+		httpRequest.open("POST",wrp_.issuerURL,true);
+		httpRequest.setRequestHeader("Content-Type","application/x-www-form-urlencoded");
 		httpRequest.send(searchParams);
 		return true;
 	}

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-08-09</title>
+<title>てくてくノート ver 2025-09-18</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- use-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -318,9 +318,8 @@ function recognizer_amivoice() {
 	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/nolog/";	// ログを残さない場合は /nolog を付加
 	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
-	Wrp.epi = '60000';
+	Wrp.epi = '60000'; // ワンタイム APPKEY の有効期間（ミリ秒）
 	Wrp.grammarFileNames = '-a2-multi-general';
-	Recorder.maxRecordingTime = 0;
 
 	function update_result(result,is_final) {
 		let text = html_encode(amivoice_parse(result).text);
@@ -628,7 +627,7 @@ async function receive(event) {
 		whiteboard.splice(response.whiteboard_size);
 		if ( response.whiteboard_size == 0 ) { $('#whiteboard-table').empty(); }
 		let t = $('#whiteboard-table > tr > td');
-		t.slice(response.whiteboard_size).text('').attr('name','-').removeClass('text-warning'); // whiteboard-table は縮小せず空白に。
+		t.slice(response.whiteboard_size).text('　').attr('name','-').removeClass('text-warning'); // whiteboard-table は縮小しない。ただし全角スペースを入れないとつぶれる模様。
 		response.whiteboard.forEach((c)=>{
 			let o = whiteboard[c.i];
 			let s = html_encode(translate_text(o));
