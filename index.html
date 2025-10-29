@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-09-18</title>
+<title>てくてくノート ver 2025-10-29</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- use-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -869,7 +869,7 @@ $('#my-text').on('input',function(event){
 	});
 
 $('#whiteboard-div').on('click','#whiteboard-table tr td',function(event){
-	if ( event.button == 0 ) {
+	if ( event.button == 0 && $(this).hasClass('text-warning') == false ) { // 編集中の行は無視する。
 		if ( my_text_index != -1 ) {
 			$('#my-text').val(my_text_previous);
 			socket_send(1);
