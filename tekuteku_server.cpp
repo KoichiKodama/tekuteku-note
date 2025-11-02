@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-08-09";
+static std::string m_version = "build 2025-11-03";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -70,7 +70,6 @@ static int debug_async_read = 0;
 static int debug_write = 0;
 static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
-static int debug_find_count = 0;
 
 std::string k_date_time( int days_off = 0 ) {
 	tzset();
@@ -204,7 +203,7 @@ struct taker_info_t {
 	std::string text; // 未確定テキスト
 	bool is_readonly;
 	bool is_init;
-	int whiteboard_voice_index;
+	int whiteboard_voice_index; // 音声認識での最初の未確定の直前
 };
 struct whiteboard_element_t {
 	whiteboard_element_t() : id(-1),edit(0),tobe_sent(true),num(-1) {};
@@ -472,11 +471,11 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				if ( json_i.contains("voice_text") == true && json_i["voice_text"].empty() == false ) {
 					auto& l = json_i["voice_text"];
 					auto ii = m_whiteboard.begin()+info.whiteboard_voice_index;
-					if ( json_i.contains("voice_fixed") ) {
-						const int id_fixed = json_i["voice_fixed"];
-						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
-						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj);
-					}
+//					if ( json_i.contains("voice_fixed") ) {
+//						const int id_fixed = json_i["voice_fixed"];
+//						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
+//						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj);
+//					}
 					for (int j=0;j<l.size();j++) {
 						const auto& x = l[j];
 						const int id = x["id"];
@@ -488,7 +487,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 						}
 						else {
 							auto& c = (*ii);
-							if ( c.edit == 0 && c.text != text ) {
+							if ( c.edit == 0 && c.text != text ) { // 人の修正あれば音声認識結果を更新しない
 								c.text = text;
 								c.tobe_sent = true;
 								whiteboard_updated_index = std::min(whiteboard_updated_index,static_cast<int>(std::distance(m_whiteboard.begin(),ii)));
@@ -496,7 +495,11 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 						}
 						ii++;
 					}
-					debug_find_count++;
+					if ( json_i.contains("voice_fixed") ) {
+						const int id_fixed = json_i["voice_fixed"];
+						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
+						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj); else log((boost::format("voice_fixed=%d was not found\n") % id_fixed).str());
+					}
 					if ( json_i.contains("voice_last") ) {
 						const int id_last = json_i["voice_last"];
 						for (;ii!=m_whiteboard.end();) { if ( (*ii).num == info.num && (*ii).id > id_last ) { ii = m_whiteboard.erase(ii); } else { ii++; } }
@@ -729,7 +732,6 @@ void terminate_server() {
 	log((boost::format("debug_write = %d\n") % debug_write).str());
 	log((boost::format("debug_write_full = %d\n") % debug_write_full).str());
 	log((boost::format("debug_whiteboard_update = %d\n") % debug_whiteboard_update).str());
-	log((boost::format("debug_find_count = %d\n") % debug_find_count).str());
 	log("service stopped\n");
 }
 
