@@ -497,8 +497,9 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 					}
 					if ( json_i.contains("voice_fixed") ) {
 						const int id_fixed = json_i["voice_fixed"];
+						auto ii = m_whiteboard.begin()+info.whiteboard_voice_index;
 						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
-						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj); else log((boost::format("voice_fixed=%d was not found\n") % id_fixed).str());
+						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj); // voice_fixed が前と同じ場合には見つからない
 					}
 					if ( json_i.contains("voice_last") ) {
 						const int id_last = json_i["voice_last"];
