@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-11-03";
+static std::string m_version = "build 2025-11-04";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -471,11 +471,6 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, boost::be
 				if ( json_i.contains("voice_text") == true && json_i["voice_text"].empty() == false ) {
 					auto& l = json_i["voice_text"];
 					auto ii = m_whiteboard.begin()+info.whiteboard_voice_index;
-//					if ( json_i.contains("voice_fixed") ) {
-//						const int id_fixed = json_i["voice_fixed"];
-//						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
-//						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj);
-//					}
 					for (int j=0;j<l.size();j++) {
 						const auto& x = l[j];
 						const int id = x["id"];
