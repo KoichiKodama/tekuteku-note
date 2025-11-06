@@ -2,7 +2,7 @@
 <html lang="ja" data-bs-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>ラズパイコントロール 2025-08-06</title>
+<title>ラズパイコントロール 2025-11-06</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
 </head>
@@ -13,12 +13,15 @@
 	<caption class="text-center text-white m-2 fs-3 fw-bold">ラズパイコントロール</caption>
 	<tbody></tbody>
 	</table>
-	<div class="justify-content-center">
-	<button class="btn btn-outline-success m-2" id="pi-rescan">リスト更新</button>
-	<button class="btn btn-outline-warning m-2" id="pi-shutdown">ラズパイ終了</button>
-	<a class="btn btn-outline-secondary m-2" href="./ssl-keys/tekuteku-pi.crt">ラズパイ証明書</a> <!-- download を指定すると boost::beast::http::error::end_of_stream となる -->
+	<div class="btn-toolbar justify-content-center">
+		<button class="btn btn-outline-success m-1" id="pi-rescan">リスト更新</button>
+		<button class="btn btn-outline-warning m-1" id="pi-shutdown">ラズパイ終了</button>
+		<button class="btn btn-outline-danger m-1" id="pi-update">ラズパイ更新</button>
 	</div>
 	<div class="alert alert-dark m-2 mx-auto text-center">WiFiの接続先を変えると<br>ネットワークが切断されることがあります。<br>その時は再接続して下さい。</div>
+	<div class="btn-toolbar justify-content-center">
+		<a class="btn btn-outline-secondary m-2" href="./ssl-keys/tekuteku-pi.crt">ラズパイ証明書ダウンロード</a> <!-- download を指定すると boost::beast::http::error::end_of_stream となる -->
+	</div>
 </div>
 </div>
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
@@ -56,14 +59,16 @@ function update_table(data) {
 	$('#connection-table > tbody').empty().append(s);
 }
 
+function buttons_disabled(b) { $('#pi-update,#pi-shutdown,#pi-rescan,.pi-connect,.pi-disconnect').prop('disabled',b); }
+
 $(document).ready( function(){
 	const in_progress = '<tr><td class="text-center">更新中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span></td></tr>';
 
 	$('#connection-table > tbody').empty().append(in_progress);
 	$.ajax("./pi-control.sh?job=status",{method:'get',async:true,dataType:'json'})
-		.done((data)=>{
-			if ( data.status == 0 ) alert(data.message);
-			update_table(data);
+		.done((r)=>{
+			if ( r.status == 0 ) alert(r.message);
+			update_table(r);
 		})
 		.fail(()=>{ alert("通信エラーです"); })
 
@@ -71,7 +76,7 @@ $(document).ready( function(){
 		let ssid = $(this).val();
 		$(this).text('接続中');
 		$.ajax("./pi-control.sh?job=connect&ssid="+ssid,{method:'get',async:true,dataType:'json'})
-			.done((data)=>{ if ( data.status == 0 ) alert(data.message); })
+			.done((r)=>{ if ( r.status == 0 ) alert(r.message); })
 			.fail(()=>{ alert("通信エラーです"); })
 			.always(()=>{ location.reload(); });
 	});
@@ -79,21 +84,35 @@ $(document).ready( function(){
 		let ssid = $(this).val();
 		$(this).text('切断中');
 		$.ajax("./pi-control.sh?job=disconnect&ssid="+ssid,{method:'get',async:true,dataType:'json'})
-			.done((data)=>{ if ( data.status == 0 ) alert(data.message); })
+			.done((r)=>{ if ( r.status == 0 ) alert(r.message); })
 			.fail(()=>{ alert("通信エラーです"); })
 			.always(()=>{ location.reload(); });
 	});
 	$('button#pi-rescan').on('click',function(){
+		buttons_disabled(true);
 		$('#connection-table > tbody').empty().append(in_progress);
 		$.ajax("./pi-control.sh?job=rescan",{method:'get',async:true,dataType:'json'})
-			.done((data)=>{	if ( data.status == 0 ) { alert(data.message); } else { update_table(data); } } )
+			.done((r)=>{ if ( r.status == 0 ) { alert(r.message); } else { update_table(r); } } )
 			.fail(()=>{ alert("通信エラーです"); })
+			.always(()=>{ buttons_disabled(false); })
 	});
 	$('button#pi-shutdown').on('click',function(){
 		if ( window.confirm('ラズパイをシャットダウンして良いですか？') == true ) {
+			buttons_disabled(true);
 			$.ajax("./pi-control.sh?job=shutdown",{method:'get',async:true,dataType:'json'})
-				.done((data)=>{ $('button').prop('disabled',true); $('#connection-table > tbody').empty(); })
+				.done(()=>{ $('button').prop('disabled',true); $('#connection-table > tbody').empty(); })
 				.fail(()=>{ alert("通信エラーです"); })
+				.always(()=>{ buttons_disabled(false); })
+		}
+	});
+	$('button#pi-update').on('click',function(){
+		if ( window.confirm('ラズパイ更新には時間がかかります。始めて良いですか？') == true ) {
+			buttons_disabled(true);
+			$(this).html('ラズパイ更新中<span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>');
+			$.ajax("./pi-control.sh?job=update",{method:'get',async:true,dataType:'json'})
+				.done((r)=>{ if ( r.status == 0 ) alert(r.message); })
+				.fail(()=>{ alert("通信エラーです"); })
+				.always(()=>{ $(this).text('ラズパイ更新'); buttons_disabled(false); });
 		}
 	});
 });

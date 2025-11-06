@@ -5,7 +5,7 @@ import subprocess
 import json
 import time
 
-version = '2025-08-06'
+version = '2025-11-06'
 wifi_dev = 'wlan1'
 known_connections = ['AUEWS','AUEWT','auewlan@sien','sim','sim-nttpc','eth0','kodama-420','kodama-home']
 
@@ -111,6 +111,14 @@ def job_disconnect(ssid):
 #						return ( {"status":1,"message":"connected({0})".format(ssid)} if a[3] == "--" else {"status":0,"message":"error({0})".format(ssid)} )
 	return {"status":1,"message":"no-connection {0}".format(ssid)}
 
+def job_update():
+	r0 = subprocess.run('sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get -y autoremove',encoding='utf-8',shell=True)
+	if r0.returncode == 0 :
+		r1 = subprocess.run('/home/sien/update-tekuteku-note.sh 1>/dev/null 2>&1',encoding='utf-8',shell=True)
+		if r1.returncode == 0 : return {"status":1,"message":"done"}
+		return {"status":0,"message":"error in update-tekuteku-note.sh"}
+	return {"status":0,"message":"error in apt"}
+
 if len(sys.argv) < 2 :
 	print_responce({"status":0,"message":"no-job-specified"})
 	sys.exit(1)
@@ -129,5 +137,7 @@ match job:
 		print_responce(job_connect(ssid))
 	case 'disconnect':
 		print_responce(job_disconnect(ssid))
+	case 'update':
+		print_responce(job_update())
 	case _:
 		print_responce({"status":0,"message":"unknown job={0}".format(job)})
