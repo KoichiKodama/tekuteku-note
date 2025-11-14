@@ -60,7 +60,7 @@ static int DEFAULT_PORT = 443;
 #endif
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2025-11-04";
+static std::string m_version = "build 2025-11-13";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -563,7 +563,7 @@ public:
 		while ( ii < query.size() ) {
 			std::string a = query.substr(ii,jj-ii);
 			std::string::size_type i = a.find("=");
-			m_params[a.substr(0,i)] = ( i == std::string::npos ? "" : a.substr(i+1) );
+			m_params.emplace_back(std::make_pair(a.substr(0,i),( i == std::string::npos ? "" : a.substr(i+1) )));
 			ii = jj+1;
 			jj = query.find_first_of("&",ii);
 			if ( jj == std::string::npos ) jj = query.size();
@@ -577,14 +577,14 @@ public:
 		return r;
 	};
 	std::string param( const std::string& key ) const {
-		auto ii = m_params.find(key);
+		auto ii = std::find_if(m_params.begin(),m_params.end(),[key]( const auto& c ){ return c.first == key; });
 		return ( ii == m_params.end() ? "" : (*ii).second );
 	};
 
 private:
 	std::string m_path;
 	std::string m_path_ex;
-	std::map<std::string,std::string> m_params;
+	std::vector<std::pair<std::string,std::string>> m_params;
 };
 
 bool is_accessible( const std::string& f ) {

@@ -4,16 +4,21 @@ import shlex
 import subprocess
 import json
 import time
+import re
 
-version = '2025-11-06'
+version = '2025-11-14'
 wifi_dev = 'wlan1'
-known_connections = ['AUEWS','AUEWT','auewlan@sien','sim','sim-nttpc','eth0','kodama-420','kodama-home']
+known_connections = ['AUEWS','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
 
-def get_value(key,text):
-	a = text.strip().split('=')
-	if len(a) != 2:
-		return "undefined"
-	return a[1] if a[0] == key else "undefined"
+def get_key(text):
+	i = text.find('=')
+	if i == -1: return ''
+	return text[:i]
+
+def get_value(text):
+	i = text.find('=')
+	if i == -1: return ''
+	return text[i+1:]
 
 class connection_t:
 	def __init__(self,name,device="",status=9,addr="",kind=""):
@@ -113,18 +118,32 @@ def job_disconnect(ssid):
 
 def job_update():
 	r0 = subprocess.run('sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get -y autoremove',encoding='utf-8',shell=True)
-	if r0.returncode == 0 :
+	if r0.returncode == 0:
 		r1 = subprocess.run('/home/sien/update-tekuteku-note.sh 1>/dev/null 2>&1',encoding='utf-8',shell=True)
-		if r1.returncode == 0 : return {"status":1,"message":"done"}
+		if r1.returncode == 0: return {"status":1,"message":"done"}
 		return {"status":0,"message":"error in update-tekuteku-note.sh"}
 	return {"status":0,"message":"error in apt"}
 
-if len(sys.argv) < 2 :
+def job_wpa2_enterprise(ssid,username,password):
+	if username == '':
+#		r = subprocess.run("sudo nmcli con down {0} & sudo nmcli con modify {0} 802-1x.identity - 802-1x.password -".format(ssid),encoding='utf-8',shell=True)
+		r = subprocess.run("sudo nmcli con modify {0} 802-1x.identity - 802-1x.password -".format(ssid),encoding='utf-8',shell=True)
+		if r.returncode != 0: return {"status":0,"message":"failed to delete account for {0}".format(ssid)}
+		return {"status":1,"message":"{0} account deleted".format(ssid)}
+	else:
+		r = subprocess.run('sudo nmcli con modify {0} 802-1x.identity {1} 802-1x.password {2}'.format(ssid,username,password),encoding='utf-8',shell=True)
+		if r.returncode != 0: return {"status":0,"message":"failed to update account for {0}".format(ssid)}
+		return {"status":1,"message":"{0} account updated".format(ssid)}
+
+cmd = {}
+for x in sys.argv:
+	cmd[get_key(x)] = get_value(x)
+
+if 'job' not in cmd.keys():
 	print_responce({"status":0,"message":"no-job-specified"})
 	sys.exit(1)
+job = cmd['job']
 
-job = get_value("job",sys.argv[1])
-ssid = "" if len(sys.argv) != 3 else get_value("ssid",sys.argv[2])
 match job:
 	case 'status':
 		print_responce(job_status(0))
@@ -133,11 +152,19 @@ match job:
 		r = subprocess.run(shlex.split('shutdown now'))
 	case 'rescan':
 		print_responce(job_status(1))
-	case 'connect':
-		print_responce(job_connect(ssid))
-	case 'disconnect':
-		print_responce(job_disconnect(ssid))
 	case 'update':
 		print_responce(job_update())
+	case 'connect':
+		if 'ssid' not in cmd: print_responce({"status":0,"message":"ssid not specified"})
+		print_responce(job_connect(cmd['ssid']))
+	case 'disconnect':
+		if 'ssid' not in cmd: print_responce({"status":0,"message":"ssid not specified"})
+		print_responce(job_disconnect(cmd['ssid']))
+	case 'wpa2-enterprise':
+		if 'ssid' not in cmd: print_responce({"status":0,"message":"ssid not specified"})
+		ssid = cmd['ssid']
+		username = '' if 'username' not in cmd else cmd['username']
+		password = '' if 'password' not in cmd else cmd['password']
+		print_responce(job_wpa2_enterprise(ssid,username,password))
 	case _:
 		print_responce({"status":0,"message":"unknown job={0}".format(job)})
