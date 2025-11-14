@@ -21,7 +21,7 @@
 	<div class="alert alert-dark m-2 mx-auto text-center">WiFiの接続先を変えると<br>ネットワークが切断されることがあります。<br>その時は再接続して下さい。</div>
 	<div class="input-group justify-content-center m-2">
 		<div class="input-group-text mx-1">AUEWSで使うアカウントの</div>
-		<button class="btn btn-outline-secondary" id="pi-set-auews">更新</button>
+		<button class="btn btn-outline-secondary mx-1" id="pi-set-auews">更新</button>
 		<button class="btn btn-outline-secondary" id="pi-remove-auews">削除</button>
 	</div>
 	<div class="input-group justify-content-center m-2">
@@ -122,6 +122,15 @@ function update_table(data) {
 	$('#connection-table > tbody').empty().append(s);
 }
 
+let html_shutdown = `
+<div class="container" style="width:400px;">
+	<div class="alert alert-warning">
+		<div class="text-center fs-3">シャットダウン開始しました。</div>
+		<div class="text-center">緑LEDが完全に消灯したらシャットダウン完了です。</div>
+		<div class="text-center">このウインドウは閉じて下さい。</div>
+	</div>
+</div>`;
+
 $(document).ready( function(){
 	let x = new blocker_t('#block');
 	$.ajax("./pi-control.sh?job=status",{method:'get',async:true,dataType:'json'})
@@ -161,7 +170,7 @@ $(document).ready( function(){
 	$('button#pi-shutdown').on('click',function(){
 		if ( window.confirm('ラズパイをシャットダウンして良いですか？') == true ) {
 			$.ajax("./pi-control.sh?job=shutdown",{method:'get',async:true,dataType:'json'})
-				.done(()=>{ $('body').empty().html('<div class="alert alert-warning text-center">シャットダウンしました。<wbr>ウインドウを閉じて下さい。</div>'); })
+				.done(()=>{ $('body').empty().html(html_shutdown); })
 				.fail(()=>{ alert("通信エラー"); })
 		}
 	});
