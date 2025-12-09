@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-11-04</title>
+<title>てくてくノート ver 2025-12-09</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- use-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -720,8 +720,6 @@ function set_theme(theme) {
 	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
 }
 
-function scroll_input() { window.scroll({top:$('div.container-fluid > div.row:last-child').offset().top-window.visualViewport.height,behavior:'instant'}) }
-
 function set_screen_mode(mode) {
 	let is_small_screen = function(){ return ( is_mobile ? true : document.documentElement.clientWitdh < 576 ); }
 
@@ -767,7 +765,6 @@ function set_screen_mode(mode) {
 	}
 	$('#whiteboard-div').height(height_whiteboard);
 	if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
-	if (is_mobile) scroll_input();
 }
 
 function shortcut_from_cookie() {
@@ -814,8 +811,10 @@ set_screen_mode(0);
 shortcut_from_cookie();
 textarea_height = $('#my-text').height();
 
-// スマホの場合に、入力欄 (#my-text) が画面下部になる様にスクロール
-if (is_mobile) $(window.visualViewport).on('resize',()=>{scroll_input()});
+// スマホの場合に、入力時に入力欄 (#my-text) が画面下部になる様にスクロール
+if (is_mobile) $('#my-text').on('focus',()=>{
+	setTimeout(()=>{window.scroll({top:$('div.container-fluid > div.row:last-child').offset().top-window.visualViewport.height,behavior:'instant'});},100);
+});
 
 const resize_observer = new ResizeObserver((e)=>{ set_screen_mode(); });
 $('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
