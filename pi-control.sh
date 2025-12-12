@@ -6,7 +6,7 @@ import json
 import time
 import re
 
-version = '2025-11-14'
+version = '2025-12-12'
 wifi_dev = 'wlan1'
 known_connections = ['AUEWS','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
 
@@ -64,12 +64,13 @@ def job_status(force_rescan):
 	wifi = []
 	o = "-rescan yes" if force_rescan == 1 else ""
 	r = subprocess.run(shlex.split('nmcli -g SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
-	l = r.stdout.splitlines()
-	for s in l[1:len(l)]:
-		ss = s.split(':')
-		ssid = ss[0]
-		signal = int(ss[1])
-		if signal >= 60: wifi.append(ssid)
+	if r.returncode == 0:
+		l = r.stdout.splitlines()
+		for s in l[1:len(l)]:
+			ss = s.split(':')
+			ssid = ss[0]
+			signal = int(ss[1])
+			if signal >= 60: wifi.append(ssid)
 
 	for c in connections.values():
 		if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
