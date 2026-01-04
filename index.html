@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2025-12-10</title>
+<title>てくてくノート ver 2026-01-04</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
-<meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- use-scalable=no でスマホ入力での画面縮小を抑制できる -->
+<meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
 <style>.teku { background-size: auto; background-repeat: no-repeat; }</style>
 </head>
 <body>
@@ -191,11 +191,14 @@ function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').re
 var token = {};	// トークン一覧
 
 function recognizer_vosk() {
-	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var vosk_socket = null;
-	var mic = new mic_monitor_t('#recognition-control');
-	var mic_stream;
-	var vosk_url = tekuteku_url.split(/(:[0-9]+|\?)/)[0]+":"+token["vosk"].port;
+	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
+	let vosk_socket = null;
+	let mic_stream;
+	const mic = new mic_monitor_t('#recognition-control');
+
+	// vosk.url が localhost を含まない場合は tekuteku_url 内の localhost を host に置換して通知する
+	const vosk_url = token["vosk"].url.replace('{hostname}',location.hostname);
+	const tekuteku_url_loc = ( vosk_url.indexOf("localhost") == -1 ? tekuteku_url.replace("localhost",host) : tekuteku_url );
 
 	function change_state(i) {
 		state = i;
@@ -207,7 +210,7 @@ function recognizer_vosk() {
 		change_state(1);
 		vosk_socket = new WebSocket(vosk_url);
 		vosk_socket.onopen = function(event){
-			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url}","vosk_model":"${token["vosk"].model}"}`);
+			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url_loc}","vosk_model":"${token["vosk"].model}"}`);
 			mic_stream = new mic_stream_t(vosk_socket);
 			mic_stream.start();
 			mic.start();
@@ -244,13 +247,18 @@ function recognizer_vosk() {
 	return recognizer_;
 }
 
+function mk_recognizer_url() {}
+
 function recognizer_yyprobe() {
-	var api_key = token["yyprobe"].key;
-	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var yy_socket = null;
-	var mic = new mic_monitor_t('#recognition-control');
-	var mic_stream;
-	var yy_url = tekuteku_url.split(/(:[0-9]+|\?)/)[0]+":"+token["yyprobe"].port;
+	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
+	let yy_socket = null;
+	let mic_stream;
+	const mic = new mic_monitor_t('#recognition-control');
+	const api_key = token["yyprobe"].key;
+
+	// yyprobe.url が localhost を含まない場合は tekuteku_url 内の localhost を host に置換して通知する
+	const yy_url = token["yyprobe"].url.replace('{hostname}',location.hostname);
+	const tekuteku_url_loc = ( yy_url.indexOf("localhost") == -1 ? tekuteku_url.replace("localhost",host) : tekuteku_url );
 
 	function change_state(i) {
 		state = i;
@@ -262,7 +270,7 @@ function recognizer_yyprobe() {
 		change_state(1);
 		yy_socket = new WebSocket(yy_url);
 		yy_socket.onopen = function(event){
-			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"${tekuteku_url}"}`);
+			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"${tekuteku_url_loc}"}`);
 			mic_stream = new mic_stream_t(yy_socket);
 			mic_stream.start();
 			mic.start();
@@ -375,7 +383,7 @@ function recognizer_default() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 	var sprec = new SpeechRecognition();
-	sprec.continuous = true;
+	sprec.continuous = false;
 	sprec.interimResults = true;
 	sprec.maxAlternatives = 1;
 	sprec.lang = 'ja-JP';
@@ -432,9 +440,19 @@ function recognizer_default() {
 		}
 		socket_send(0);
 	}
-	sprec.onspeechstart = function(event){ console.log(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; socket_send(2); }
-	sprec.onspeechend = function(event){ console.log(`speechend ${state}`); }
-	sprec.onstart = function(){ console.log(`start ${state}`); change_state(2); }
+//	sprec.onspeechstart = function(event){ console.log(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; socket_send(2); }
+//	sprec.onspeechend = function(event){ console.log(`speechend ${state}`); }
+//	sprec.onstart = function(){ console.log(`start ${state}`); change_state(2); }
+	sprec.onaudiostart = function(event){
+		console.log(`audiostart ${state}`);
+		retry_count = 0;
+		recognized_text_list = [];
+		socket_send(2);
+	}
+	sprec.onstart = function(){
+		console.log(`start ${state}`);
+		change_state(2);
+	}
 	sprec.onend = function(){
 		console.log(`end ${state}`);
 		switch (state) {
