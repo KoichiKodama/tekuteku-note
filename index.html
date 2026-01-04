@@ -440,9 +440,6 @@ function recognizer_default() {
 		}
 		socket_send(0);
 	}
-//	sprec.onspeechstart = function(event){ console.log(`speechstart ${state}`); retry_count = 0; recognized_text_list = []; socket_send(2); }
-//	sprec.onspeechend = function(event){ console.log(`speechend ${state}`); }
-//	sprec.onstart = function(){ console.log(`start ${state}`); change_state(2); }
 	sprec.onaudiostart = function(event){
 		console.log(`audiostart ${state}`);
 		retry_count = 0;
