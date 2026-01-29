@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-01-04</title>
+<title>てくてくノート ver 2026-01-29</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -157,7 +157,7 @@ var translate_text = function(c){ return c.text; }
 
 var socket;
 var keep_alive = false;
-var host = "";
+var host = ""; // tekuteku_server の URL
 var id;	// 自分自身の識別子
 var dialog;
 var whiteboard = [];
@@ -190,15 +190,12 @@ function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').re
 
 var token = {};	// トークン一覧
 
-function recognizer_vosk() {
+function recognizer_whisper() {
 	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	let vosk_socket = null;
+	let socket = null;
 	let mic_stream;
 	const mic = new mic_monitor_t('#recognition-control');
-
-	// vosk.url が localhost を含まない場合は tekuteku_url 内の localhost を host に置換して通知する
-	const vosk_url = token["vosk"].url.replace('{hostname}',location.hostname);
-	const tekuteku_url_loc = ( vosk_url.indexOf("localhost") == -1 ? tekuteku_url.replace("localhost",host) : tekuteku_url );
+	const url = token["whisper"].url.replace('localhost',host);
 
 	function change_state(i) {
 		state = i;
@@ -208,29 +205,113 @@ function recognizer_vosk() {
 	function start_() {
 		if ( state != 0 ) return;
 		change_state(1);
-		vosk_socket = new WebSocket(vosk_url);
-		vosk_socket.onopen = function(event){
-			vosk_socket.send(`{"job":"start","tekuteku_url":"${tekuteku_url_loc}","vosk_model":"${token["vosk"].model}"}`);
-			mic_stream = new mic_stream_t(vosk_socket);
+		socket = new WebSocket(url);
+		socket.onopen = function(event){
+			mic_stream = new mic_stream_t(socket);
 			mic_stream.start();
 			mic.start();
+			change_state(2);
 		};
-		vosk_socket.onclose = function(event){ change_state(0); };
-		vosk_socket.onerror = function(event){ stop_(); change_state(9); };
-		vosk_socket.onmessage = function(event) {
-			let rc = JSON.parse(event.data);
-			switch (rc.code) {
-				case "start": change_state(2); break;
-				case "stop": vosk_socket.close(); break;
-				case "error": stop_(); change_state(9); vosk_socket.close(); break;
+		socket.onclose = function(event){ change_state(0); };
+		socket.onerror = function(event){ stop_(); change_state(9); };
+		socket.onmessage = function(event) {
+			const data = JSON.parse(event.data);
+			if ( data.type === "config" ) {
+				if ( data.useAudioWorklet !== true ) alert("whisper -> --pcm-input not specified");
+				return;
+			}
+			if ( data.type === "ready_to_stop" ) {
+				console.log("whisper -> ready_to_stop received");
+				socket.close();
+				return;
+			}
+			if ( data.lines === undefined ) return;
+			recognized_text_list = data.lines.filter((c)=>c.speaker>0||c.text.length>0).map((c,j)=>new recognized_text(`${c.speaker}:${c.text}`,true,j));
+			socket_send(0);
+//			if (final) {
+//				recognized_text_list = [];
+//				socket_send(2);
+//			}
+		};
+	};
+
+	function stop_() {
+		if ( state != 2 ) return;
+		change_state(1);
+		mic.stop();
+		mic_stream.stop(); 
+		socket.close();
+	};
+
+	function status_() { change_state(state); return state; };
+
+	var recognizer_ = {
+		start : start_,
+		stop : stop_,
+		status : status_,
+		set_lang : ()=>alert('set_lang is not supported'),
+		set_dic : ()=>alert('set_dic is not supported'),
+		on_change_state : undefined
+	};
+	change_state(0);
+	return recognizer_;
+}
+
+function recognizer_vosk() {
+	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
+	let socket = null;
+	let mic_stream;
+	const mic = new mic_monitor_t('#recognition-control');
+	const model = token["vosk"].model;
+	const url = token["vosk"].url.replace('localhost',host);
+
+	function change_state(i) {
+		state = i;
+		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
+	}
+
+	function start_() {
+		if ( state != 0 ) return;
+		change_state(1);
+		socket = new WebSocket(url);
+		socket.onopen = function(event){
+			socket.send(`{"model":"${model}"}`);
+			mic_stream = new mic_stream_t(socket);
+			mic_stream.start();
+			mic.start();
+			change_state(2);
+		};
+		socket.onclose = function(event){ change_state(0); };
+		socket.onerror = function(event){ stop_(); change_state(9); };
+		socket.onmessage = function(event) {
+			const response = JSON.parse(event.data);
+			const final = response.final;
+			const text = response.text;
+			let a = my_split(text,35,40,"ja-JP");
+			let j=0;
+			a.forEach((x)=>{
+				if ( j < recognized_text_list.length ) {
+					let y = recognized_text_list[j];
+					if ( x != y.text || final != y.final ) y.set(x,final,j);
+				}
+				else recognized_text_list.push(new recognized_text(x,final,j));
+				j++;
+			});
+			if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
+			socket_send(0);
+			if (final) {
+				recognized_text_list = [];
+				socket_send(2);
 			}
 		};
 	};
 
 	function stop_() {
+		if ( state != 2 ) return;
 		change_state(1);
 		mic.stop();
 		mic_stream.stop(); 
+		socket.close();
 	};
 
 	function status_() { change_state(state); return state; };
@@ -247,18 +328,13 @@ function recognizer_vosk() {
 	return recognizer_;
 }
 
-function mk_recognizer_url() {}
-
 function recognizer_yyprobe() {
 	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	let yy_socket = null;
+	let socket = null;
 	let mic_stream;
 	const mic = new mic_monitor_t('#recognition-control');
-	const api_key = token["yyprobe"].key;
-
-	// yyprobe.url が localhost を含まない場合は tekuteku_url 内の localhost を host に置換して通知する
-	const yy_url = token["yyprobe"].url.replace('{hostname}',location.hostname);
-	const tekuteku_url_loc = ( yy_url.indexOf("localhost") == -1 ? tekuteku_url.replace("localhost",host) : tekuteku_url );
+	const key = token["yyprobe"].key;
+	const url = token["yyprobe"].url.replace('localhost',host);
 
 	function change_state(i) {
 		state = i;
@@ -268,21 +344,35 @@ function recognizer_yyprobe() {
 	function start_() {
 		if ( state != 0 ) return;
 		change_state(1);
-		yy_socket = new WebSocket(yy_url);
-		yy_socket.onopen = function(event){
-			yy_socket.send(`{"job":"start","api_key":"${api_key}","tekuteku_url":"${tekuteku_url_loc}"}`);
-			mic_stream = new mic_stream_t(yy_socket);
+		socket = new WebSocket(url);
+		socket.onopen = function(event){
+			socket.send(`{"key":"${key}"}`);
+			mic_stream = new mic_stream_t(socket);
 			mic_stream.start();
 			mic.start();
+			change_state(2);
 		};
-		yy_socket.onclose = function(event){ change_state(0); };
-		yy_socket.onerror = function(event){ stop_(); change_state(9); };
-		yy_socket.onmessage = function(event) {
-			let rc = JSON.parse(event.data);
-			switch (rc.code) {
-				case "start": change_state(2); break;
-				case "stop": yy_socket.close(); break;
-				case "error": stop_(); change_state(9); yy_socket.close(); break;
+		socket.onclose = function(event){ change_state(0); };
+		socket.onerror = function(event){ stop_(); change_state(9); };
+		socket.onmessage = function(event) {
+			const response = JSON.parse(event.data);
+			const final = response.final;
+			const text = response.text;
+			let a = my_split(text,35,40,"ja-JP");
+			let j=0;
+			a.forEach((x)=>{
+				if ( j < recognized_text_list.length ) {
+					let y = recognized_text_list[j];
+					if ( x != y.text || final != y.final ) y.set(x,final,j);
+				}
+				else recognized_text_list.push(new recognized_text(x,final,j));
+				j++;
+			});
+			if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
+			socket_send(0);
+			if (final) {
+				recognized_text_list = [];
+				socket_send(2);
 			}
 		};
 	};
@@ -292,6 +382,7 @@ function recognizer_yyprobe() {
 		change_state(1);
 		mic.stop();
 		mic_stream.stop();
+		socket.close();
 	};
 
 	function status_() { change_state(state); return state; };
@@ -331,6 +422,7 @@ function recognizer_amivoice() {
 
 	function update_result(result,is_final) {
 		let text = html_encode(amivoice_parse(result).text);
+		if (!is_final) text = text.replace(/\.+$/,''); // AmiVoice が付加する末尾の ... を削除する
 		let a = my_split(text,35,40,'ja-JP');
 		let j=0;
 		a.forEach((x)=>{
@@ -509,6 +601,7 @@ function set_recognition_engine(engine) {
 		}
 		case "yyprobe": { recognizer = recognizer_yyprobe(); break; }
 		case "vosk": { recognizer = recognizer_vosk(); break; }
+		case "whisper": { recognizer = recognizer_whisper(); break; }
 	}
 	recognizer.on_change_state = recognition_control_update;
 	recognizer.status();
@@ -637,6 +730,7 @@ function parse_token() {
 	if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); n++; }
 	if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); n++; }
 	if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); n++; }
+	if ( 'whisper' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="whisper">WHISPER</li>'); n++; }
 	if ( n != 0 ) $('#recognition-engine').show();
 	if ( 'google-translate' in token ) {
 		translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
@@ -664,6 +758,7 @@ async function receive(event) {
 		host_select(response.server);
 		if ( 'yyprobe' in response ) token['yyprobe'] = response['yyprobe'];
 		if ( 'vosk' in response ) token['vosk'] = response['vosk'];
+		if ( 'whisper' in response ) token['whisper'] = response['whisper'];
 		if ( 'amivoice' in response ) token['amivoice'] = response['amivoice'];
 		if ( 'google-translate' in response ) token['google-translate'] = response['google-translate'];
 		parse_token();
