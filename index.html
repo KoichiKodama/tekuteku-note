@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-01-30</title>
+<title>てくてくノート ver 2026-02-01</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -418,7 +418,7 @@ function recognizer_amivoice() {
 	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
 	Wrp.epi = '60000'; // ワンタイム APPKEY の有効期間（ミリ秒）
-	Wrp.grammarFileNames = '-a2-multi-general';
+	Wrp.grammarFileNames = '-a2-ja-general'; // 日本語 -a2-ja-general / 多言語 -a2-multi-general
 
 	function update_result(result,is_final) {
 		let text = html_encode(amivoice_parse(result).text);
