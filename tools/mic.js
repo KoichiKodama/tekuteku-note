@@ -86,16 +86,16 @@ class mic_stream_t {
 		await this.context.audioWorklet.addModule("./tools/mic-processor.js");
 		this.worklet = new AudioWorkletNode(this.context,"mic-processor",{processorOptions:{chunk_size: this.config.chunk_size},});
 		this.worklet.port.onmessage = (e)=>{
-			if ( this.socket.readyState != 1 || e.data.eventType !== "data" ) return;
-			if ( this.worklet_resolve ) {
-				this.socket.send(new Int8Array(1)); // 終了通知
+			if ( this.worklet_resolve != undefined || this.socket.readyState != 1 ) {
+				if ( this.socket.readyState == 1 ) this.socket.send(new Int8Array(0)); // 終了通知
 				if ( this.context.state === 'running' ) this.context.suspend();
 				this.stream.getTracks().forEach((track)=>track.stop());
 				this.source.disconnect();
 				this.worklet.disconnect();
 				this.worklet_resolve();
+				return;
 			}
-			else this.socket.send(e.data.audioBuffer);
+			if ( e.data.eventType == "data" && this.socket.readyState == 1 ) this.socket.send(e.data.audioBuffer);
 		};
 		this.source.connect(this.worklet);
 		this.worklet.connect(this.context.destination);
@@ -106,10 +106,10 @@ class mic_stream_t {
 		if ( this.context.state === 'suspended' ) this.context.resume();
 	};
 
-	stop() {
+	async stop() {
 		let o = Promise.withResolvers();
 		this.worklet_resolve = o.resolve;
-		return o.promise;
+		await o.promise;
 	};
 };
 
