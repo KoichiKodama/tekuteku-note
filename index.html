@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-02-03</title>
+<title>てくてくノート ver 2026-02-06</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -204,6 +204,7 @@ function recognizer_whisper() {
 
 	function start_() {
 		if ( state != 0 ) return;
+		socket_send(2);
 		change_state(1);
 		socket = new WebSocket(url);
 		socket.onopen = function(event){
@@ -272,6 +273,7 @@ function recognizer_vosk() {
 
 	function start_() {
 		if ( state != 0 ) return;
+		socket_send(2);
 		change_state(1);
 		socket = new WebSocket(url);
 		socket.onopen = function(event){
@@ -343,6 +345,7 @@ function recognizer_yyprobe() {
 
 	function start_() {
 		if ( state != 0 ) return;
+		socket_send(2);
 		change_state(1);
 		socket = new WebSocket(url);
 		socket.onopen = function(event){
@@ -462,7 +465,7 @@ function recognizer_amivoice() {
 	Wrp.resultFinalized = function(result){ update_result(result,true); };
 	Wrp.eventNotified = function(event_id,event_message){};
 
-	function start_(){ if ( state == 0 ) { Wrp.issue(); } mic.start(); };
+	function start_(){ if ( state == 0 ) { Wrp.issue(); socket_send(2); } mic.start(); };
 	function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } mic.stop(); };
 	function status_(){ change_state(state); return state; };
 	function set_dic_(dictionary){ Wrp.profileWords = dictionary.join('|'); };
@@ -567,7 +570,7 @@ function recognizer_default() {
 		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
 	};
 
-	function start_() { if ( state == 0 ) { change_state(1); sprec.start(); mic.start(); } };
+	function start_() { if ( state == 0 ) { change_state(1); sprec.start(); mic.start(); socket_send(2); } };
 	function stop_() { if ( state == 2 ) { change_state(1); sprec.stop(); mic.stop(); } };
 	function status_(){ change_state(state); return state; };
 	function set_lang_(lang){ sprec.lang = lang; if ( state == 2 ) { sprec.stop(); } };
@@ -977,7 +980,6 @@ $('#recognition-dic-load').on('change',function(){
 	}
 });
 $('#recognition-control').on('click',function(event){
-	let x = $('#recognition-engine li').filter('.text-bg-primary').data('engine');
 	switch ( $('#recognition-control').val() ) {
 		case '0' : { recognizer.start(); break; }
 		case '2' : { recognizer.stop(); break; }

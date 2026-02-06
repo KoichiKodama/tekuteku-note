@@ -27,7 +27,7 @@ class mic_monitor_t {
 	}
 
 	async start() {
-		await this.init();
+		if ( this.context == undefined ) await this.init(); // 多重起動の防止
 		if ( this.context.state === 'suspended' ) { this.context.resume(); }
 		this.timer = setInterval(()=>{
 			this.analyzer.getByteTimeDomainData(this.data);
@@ -40,7 +40,7 @@ class mic_monitor_t {
 	}
 
 	stop() {
-		if ( this.timer > 0 ) {
+		if ( this.timer != 0 ) {
 			clearInterval(this.timer);
 			this.timer = 0;
 			this.source.disconnect();
@@ -78,6 +78,7 @@ class mic_stream_t {
 				voiceIsolation: true 
 			} 
 		};
+		this.worklet_resolve = undefined;
 		this.stream = await navigator.mediaDevices.getUserMedia(mic_spec)
 		this.context = new AudioContext({sampleRate: this.config.sample_rate});
 		this.context.suspend();
@@ -86,13 +87,13 @@ class mic_stream_t {
 		await this.context.audioWorklet.addModule("./tools/mic-processor.js");
 		this.worklet = new AudioWorkletNode(this.context,"mic-processor",{processorOptions:{chunk_size: this.config.chunk_size},});
 		this.worklet.port.onmessage = (e)=>{
-			if ( this.worklet_resolve != undefined || this.socket.readyState != 1 ) {
+			if ( typeof this.worklet_resolve == "function" || this.socket.readyState > 1 ) {
 				if ( this.socket.readyState == 1 ) this.socket.send(new Int8Array(0)); // 終了通知
 				if ( this.context.state === 'running' ) this.context.suspend();
 				this.stream.getTracks().forEach((track)=>track.stop());
 				this.source.disconnect();
 				this.worklet.disconnect();
-				this.worklet_resolve();
+				if ( typeof this.worklet_resolve == "function" ) this.worklet_resolve();
 				return;
 			}
 			if ( e.data.eventType == "data" && this.socket.readyState == 1 ) this.socket.send(e.data.audioBuffer);
