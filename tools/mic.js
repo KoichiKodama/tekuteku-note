@@ -33,21 +33,23 @@ class mic_monitor_t {
 			this.analyzer.getByteTimeDomainData(this.data);
 			const d = Array.from(this.data);
 			const pk = Math.min(255,4*d.reduce((acc,c)=>Math.max(acc,Math.abs(c-128)),0));
-			$(this.ui_element).css('background-color','rgb(0,'+pk+',0)');
+			$(this.ui_element).css('--bs-btn-bg','rgb(0,'+pk+',0)'); // background-color ではなく --bs-btn-bg を使うと btn-outline-success が崩れない
 		},100);
 		$(this.ui_element).attr({'data-bs-toggle':'tooltip','data-bs-placement':'top','title':this.label});
 		this.tooltip = new bootstrap.Tooltip($(this.ui_element)[0],{trigger:'hover'});
 	}
 
-	stop() {
+	async stop() {
 		if ( this.timer != 0 ) {
 			clearInterval(this.timer);
 			this.timer = 0;
 			this.source.disconnect();
 			this.stream.getTracks().forEach( track => track.stop() );
 			this.tooltip.dispose();
-			$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title').css('background-color','rgb(0,0,0)');
+			$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title').css('--bs-btn-bg','rgb(0,0,0)');
 		}
+		await this.context.close();
+		this.context = undefined;
 	}
 };
 
