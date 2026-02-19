@@ -63,7 +63,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-01-29";
+static std::string m_version = "build 2026-02-19";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -212,9 +212,9 @@ struct whiteboard_element_t {
 	whiteboard_element_t() : id(-1),edit(0),tobe_sent(true),num(-1) {};
 	whiteboard_element_t( const std::string& text, int id, int num ) : text(text),id(id),edit(0),tobe_sent(true),num(num) {};
 	std::string text;
-	int num;	// taker の通番
-	int id;		// taker 毎の音声認識の行番号
-	int edit;	// 音声認識結果を手編集した場合の対応用 ( 0:編集無, 1:編集中, 2:編集済 )
+	int num;	// 新規入力テイカーの通番
+	int id;		// テイカー毎の音声認識の行番号
+	int edit;	// 編集行の排他制御で 0:編集無 1:編集中 2:編集済 とし、編集中では編集テイカーの通番を１ビット左シフトして埋め込む
 	bool tobe_sent;
 };
 
@@ -300,7 +300,7 @@ void broadcast_status( asio::yield_context yield ) {
 					nlohmann::json x;
 					x["text"] = c.text;
 					x["i"] = i;
-					x["edit"] = c.edit;
+					x["edit"] = (c.edit&0x01);
 					j_whiteboard.emplace_back(x);
 					j_whiteboard_full[i] = x;
 					c.tobe_sent = false;
@@ -434,7 +434,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 				if ( status == 9 ) info.is_init = true;
 				if ( status == 2 ) {
 					// 新規音声認識セッション開始
-					std::for_each(m_whiteboard.begin()+info.whiteboard_voice_index,m_whiteboard.end(),[&info]( auto& c ){ if ( info.num == c.num ) { c.id = -1; c.edit = 0; } });
+					std::for_each(m_whiteboard.begin()+info.whiteboard_voice_index,m_whiteboard.end(),[&info]( auto& c ){ if ( info.num == c.num ) { c.id = -1; if ( c.edit == 2 ) c.edit = 0; } });
 					info.whiteboard_voice_index = m_whiteboard.size();
 				}
 				if ( json_i.contains("text") == true ) {
@@ -450,7 +450,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 							if ( text_index < m_whiteboard.size() ) {
 								auto& c = m_whiteboard[text_index];
 								c.text = text;
-								c.edit = 2;
+								c.edit = ( c.id == -1 ? 0:2 ); // 音声認識中の編集は c.edit = 2 で区別する
 								c.tobe_sent = true;
 								whiteboard_updated_index = std::min(whiteboard_updated_index,text_index);
 							}
@@ -464,7 +464,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 						if ( text_index >= 0 && text_index < m_whiteboard.size() ) {
 							auto& c = m_whiteboard[text_index];
 							c.text = text;
-							c.edit = 1;
+							c.edit = ((info.num<<1)|0x01);
 							c.tobe_sent = true;
 							whiteboard_updated_index = std::min(whiteboard_updated_index,text_index);
 							whiteboard_updated = true;
@@ -513,6 +513,16 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 	}
 	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % info.id % e.what()).str()); }
 	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % info.id % e.what()).str()); }
+
+	// 編集中と音声認識中の行を確定しておく
+	for (int i=0;i<m_whiteboard.size();i++) {
+		auto& c = m_whiteboard[i];
+		if (!((c.edit&0x01) == 1 && (c.edit>>1) == info.num )) continue;
+		c.edit = 0;
+		c.tobe_sent = true;
+		whiteboard_updated_index = std::min<int>(whiteboard_updated_index,i);
+		whiteboard_updated = true;
+	}
 	m_takers.erase(p_ws);
 	log((boost::format("session terminated total=%d\n") % m_takers.size()).str());
 	request_broadcast.set();
