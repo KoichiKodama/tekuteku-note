@@ -48,8 +48,10 @@ class mic_monitor_t {
 			this.tooltip.dispose();
 			$(this.ui_element).removeAttr('data-bs-toggle data-bs-placement title').css('--bs-btn-bg','rgb(0,0,0)');
 		}
-		await this.context.close();
-		this.context = undefined;
+		if ( this.context != undefined ) {
+			await this.context.close();
+			this.context = undefined;
+		}
 	}
 };
 
