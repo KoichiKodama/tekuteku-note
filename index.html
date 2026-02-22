@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-02-22</title>
+<title>てくてくノート ver 2026-02-23</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -52,15 +52,6 @@
 			</ul>
 		</div>
 	</div>
-	<div class="card m-2" id="processlocally"><div class="card-body">
-		<p class="card-text">
-		ローカル音声認識が可能な言語あります。ただしインストールが必要です。
-		利用したい言語をチェックし、ボタンを押すと利用可能になります。
-		</p>
-		<div class="input-group-text mb-2"><input type="checkbox" value="ja-JP" class="me-2">日本語</div>
-		<div class="input-group-text mb-2"><input type="checkbox" value="en-US" class="me-2">英語</div>
-		<button type="button" class="btn btn-outline-secondary">インストール</button>
-	</div></div>
 </div>
 </div>
 <div class="row">
@@ -143,6 +134,30 @@
 
 <div style="display:none;">
 <input type="file" id="recognition-dic-load" />
+</div>
+
+<div class="modal fade" id="processlocally" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal-dialog">
+<div class="modal-content">
+	<div class="modal-header">
+		<h5 class="modal-title">インターネットなしでの音声認識が可能です</h5>
+		<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+	</div>
+	<div class="modal-body">
+		<p class="modal-text">
+		次の言語はインターネットなしでの音声認識が可能です。
+		使うには<b>ブラウザ標準</b>ではなく<b>ローカル標準</b>を選択します。
+		ただしチェックの無い言語を使うには、
+		チェックして「インストールする」ボタンを押して下さい。
+		</p>
+		<div class="input-group-text mb-2"><input type="checkbox" value="ja-JP" class="me-2">日本語</div>
+		<div class="input-group-text mb-2"><input type="checkbox" value="en-US" class="me-2">英語</div>
+	</div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-secondary" id="processlocally-ok">インストールする</button>
+		<button type="button" class="btn btn-primary" data-bs-dismiss="modal">閉じる</button>
+	</div>
+</div>
 </div>
 
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
@@ -1224,22 +1239,29 @@ $('#pi').on('hide.bs.dropdown',({clickEvent})=>{
 
 if (use_voice_recognition()) {
 	// ローカル音声認識確認
-	check_processlocally().then((c)=>{
+	check_processlocally().then(async (c)=>{
 		lang_processlocally = c.available;
+
 		$('#recognition-engine').trigger('hide.bs.dropdown');
-		$('#processlocally').hide();
-		if ( c.downloadable.length != 0 ) {
-			$('#processlocally input[type="checkbox"]').parent().hide();
-			c.downloadable.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).parent().show(); });
-			$('#processlocally button').on('click',async function(){
-				$(this).prop('disabled',true);
+		$('#processlocally input[type="checkbox"]').parent().hide();
+		c.available.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',true).parent().show(); });
+		c.downloadable.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',false).parent().show(); });
+		$('#processlocally-ok').prop('disabled',( c.downloadable.length == 0 ));
+		let x = new bootstrap.Modal($('#processlocally').get(0),{});
+		let dialog = new Promise((resolve)=>{
+			$('#processlocally-ok').one('click',async function(){
 				$('#processlocally input[type="checkbox"]:checked').each(async function(){
 					const lang = $(this).val();
-					let rc = await prepare_processlocally(lang);
+					await prepare_processlocally(lang);
 				});
+				x.hide();
 			});
-			$('#processlocally').show();
-		}
+			$('#processlocally')
+				.off('hidden.bs.modal')
+				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+			x.show();
+		});
+		const result = await dialog;
 	});
 }
 $('#pi').hide();
