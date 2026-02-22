@@ -1241,27 +1241,28 @@ if (use_voice_recognition()) {
 	// ローカル音声認識確認
 	check_processlocally().then(async (c)=>{
 		lang_processlocally = c.available;
-
 		$('#recognition-engine').trigger('hide.bs.dropdown');
-		$('#processlocally input[type="checkbox"]').parent().hide();
-		c.available.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',true).parent().show(); });
-		c.downloadable.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',false).parent().show(); });
-		$('#processlocally-ok').prop('disabled',( c.downloadable.length == 0 ));
-		let x = new bootstrap.Modal($('#processlocally').get(0),{});
-		let dialog = new Promise((resolve)=>{
-			$('#processlocally-ok').one('click',async function(){
-				$('#processlocally input[type="checkbox"]:checked').each(async function(){
-					const lang = $(this).val();
-					await prepare_processlocally(lang);
+		if ( c.available.length != 0 || c.downloadable != 0 ) {
+			$('#processlocally input[type="checkbox"]').parent().hide();
+			c.available.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',true).parent().show(); });
+			c.downloadable.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',false).parent().show(); });
+			$('#processlocally-ok').prop('disabled',( c.downloadable.length == 0 ));
+			let x = new bootstrap.Modal($('#processlocally').get(0),{});
+			let d = new Promise((resolve)=>{
+				$('#processlocally-ok').one('click',async function(){
+					$('#processlocally input[type="checkbox"]:checked').each(async function(){
+						const lang = $(this).val();
+						await prepare_processlocally(lang);
+					});
+					x.hide();
 				});
-				x.hide();
+				$('#processlocally')
+					.off('hidden.bs.modal')
+					.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+				x.show();
 			});
-			$('#processlocally')
-				.off('hidden.bs.modal')
-				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
-			x.show();
-		});
-		const result = await dialog;
+			const rc = await d;
+		}
 	});
 }
 $('#pi').hide();
