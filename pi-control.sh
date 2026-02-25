@@ -6,7 +6,7 @@ import json
 import time
 import re
 
-version = '2026-02-22'
+version = '2026-02-25'
 wifi_dev = 'wlan1'
 known_connections = ['AUEWS','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
 
@@ -60,13 +60,13 @@ def job_status(force_rescan):
 				addr = r.stdout.strip('\n')
 			connections[name] = connection_t(name,device,status,addr,kind)
 
-	# ap0 以外の wifi device を探し wifi_dev とする。
-	r = subprocess.run(shlex.split('nmcli -g DEVICE,TYPE dev'),stdout=subprocess.PIPE,encoding='utf-8')
+	# type == wifi and  device != ap0 and connection != ap0 を wifi_dev とする。
+	r = subprocess.run(shlex.split('nmcli -g TYPE,DEVICE,CONNECTION dev'),stdout=subprocess.PIPE,encoding='utf-8')
 	if r.returncode == 0:
 		l = r.stdout.splitlines()
 		for s in l[1:len(l)]:
 			ss = s.split(':')
-			if ss[1] == "wifi" and ss[0] != "ap0":
+			if ss[0] == "wifi" and ss[1] != "ap0" and ss[2] != "ap0":
 				wifi_dev = ss[0]
 				break
 
