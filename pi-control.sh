@@ -6,9 +6,8 @@ import json
 import time
 import re
 
-version = '2026-02-25'
+version = '2026-03-08'
 wifi_dev = 'wlan1'
-known_connections = ['AUEWS','auewlan@sien','sim','sim-nttpc','eth0','kodama-420']
 
 def get_key(text):
 	i = text.find('=')
@@ -36,8 +35,6 @@ class connection_t_encoder(json.JSONEncoder):
 			return super().default(obj)
 
 connections = {}
-for c in known_connections:
-	connections[c] = connection_t(c)
 
 def print_responce(responce):
 	print('Content-Type: text/plain\n') # 空行を入れる
@@ -51,7 +48,7 @@ def job_status(force_rescan):
 		name = a[0]
 		kind = a[2]
 		device = a[3]
-		if name in connections.keys():
+		if name != 'ap0':
 			status = ( 1 if device != '--' else 9 )
 			addr = ''
 			if status == 1:
@@ -85,7 +82,8 @@ def job_status(force_rescan):
 	for c in connections.values():
 		if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
 
-	return { "status":1, "connections":list(connections.values()) }
+#	return { "status":1, "connections":list(connections.values()) }
+	return { "status":1, "connections":[val for key,val in sorted(connections.items())] }
 
 def job_connect(ssid):
 	r = subprocess.run(shlex.split('nmcli con'),stdout=subprocess.PIPE,encoding='utf-8',check=True)
