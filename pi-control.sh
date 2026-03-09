@@ -6,7 +6,7 @@ import json
 import time
 import re
 
-version = '2026-03-08'
+version = '2026-03-09'
 wifi_dev = 'wlan1'
 
 def get_key(text):
@@ -48,7 +48,7 @@ def job_status(force_rescan):
 		name = a[0]
 		kind = a[2]
 		device = a[3]
-		if name != 'ap0':
+		if name not in ['ap0','lo']:
 			status = ( 1 if device != '--' else 9 )
 			addr = ''
 			if status == 1:

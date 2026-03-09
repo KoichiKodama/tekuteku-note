@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-03-08</title>
+<title>てくてくノート ver 2026-03-09</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -747,15 +747,20 @@ const k_success = 'text-success-emphasis bg-success-subtle border border-success
 const k_warning = 'text-warning-emphasis bg-warning-subtle border border-warning-subtle';
 
 function socket_open(url) {
-	if (socket) { socket.close(); }
+	if ( socket?.readyState == 1 ) socket.close();
 	socket = new WebSocket(url);
+	socket.num_retry = 1;
 	$('#host').text('接続中 ...').removeClass(k_success).addClass(k_warning);
-	socket.onopen = function(event){ socket_send(0); };
+	socket.onopen = function(event){ socket_send(0); socket_open.num_retry = 1; };
 	socket.onclose = function(event){
 		console.log(`tekuteku-socket close ${event.code} ${event.reason}`);
-		$('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
-		timer_reset = setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6 時間 21600 秒で強制消去
+		timer_reset = setTimeout(()=>{ whiteboard = []; $('#whiteboard-table').empty(); },21600000); // 6時間=21600秒で強制消去
 		clearInterval(timer_ping);
+		if ( socket_open.num_retry-- > 0 ) {
+			socket_open(url);
+			$('#host').text('サーバとの接続が切断されて再接続中です。').removeClass(k_success).addClass(k_warning);
+		}
+		else $('#host').text('サーバとの接続が切断されました。再接続して下さい。').removeClass(k_success).addClass(k_warning);
 	};
 	socket.onerror = function(event){ console.log(`tekuteku-socket error`); console.log(event); } // iphone で background 移行数秒後に発生する。
 	socket.onmessage = receive;
