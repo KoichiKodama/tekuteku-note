@@ -6,8 +6,8 @@ import json
 import time
 import re
 
-version = '2026-03-09'
-wifi_dev = 'wlan1'
+version = '2026-03-10'
+wifi_dev = 'wlan0'
 
 def get_key(text):
 	i = text.find('=')
@@ -64,7 +64,7 @@ def job_status(force_rescan):
 		for s in l[1:len(l)]:
 			ss = s.split(':')
 			if ss[0] == "wifi" and ss[1] != "ap0" and ss[2] != "ap0":
-				wifi_dev = ss[0]
+				wifi_dev = ss[1]
 				break
 
 	# signal >= 60 のみを利用可とする。
