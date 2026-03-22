@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-03-09</title>
+<title>てくてくノート ver 2026-03-22</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -607,11 +607,11 @@ async function recognizer_default( is_local = false ) {
 	}
 	sprec.onspeechstart = function(event){ // このタイミングで新規認識を判断する
 		console.log(`speechstart ${state}`);
-		socket_send(2);
-		recognized_text_list = [];
+		socket_send(2); recognized_text_list = [];
 	}
 	sprec.onstart = function(){
 		console.log(`start ${state}`);
+		socket_send(2); recognized_text_list = [];
 		change_state(2);
 	}
 	sprec.onend = function(){
@@ -624,7 +624,8 @@ async function recognizer_default( is_local = false ) {
 	}
 	sprec.onerror = async function(event){
 		console.log(`error ${state} ${event.error}`);
-		if ( event.error != "no-speech" ) { sprec.stop(); await mic.stop(); change_state(9); }
+		if ( event.error == "no-speech" || event.error == "aborted" ) return;
+		sprec.stop(); await mic.stop(); change_state(9);
 	}
 
 	var recognizer_ = {

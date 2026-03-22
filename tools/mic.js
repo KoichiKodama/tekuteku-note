@@ -17,7 +17,8 @@ class mic_monitor_t {
 	async init() {
 		this.context = new AudioContext();
 		this.analyzer = this.context.createAnalyser();
-		this.stream = await navigator.mediaDevices.getUserMedia({audio:{deviceId:{exact:'default'}}}); // これでシステムでふぁおるとを選択できる。
+//		this.stream = await navigator.mediaDevices.getUserMedia({audio:{deviceId:{exact:'default'}}}); // これでシステムデフォルトを選択できる。
+		this.stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false,});
 		this.source = this.context.createMediaStreamSource(this.stream);
 		this.source.connect(this.analyzer);
 		this.data = new Uint8Array(this.analyzer.fftSize);
