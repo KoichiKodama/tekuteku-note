@@ -6,7 +6,7 @@ import json
 import time
 import re
 
-version = '2026-03-10'
+version = '2026-03-26'
 wifi_dev = 'wlan0'
 
 def get_key(text):
@@ -158,7 +158,7 @@ match job:
 		print_responce(job_status(0))
 	case 'shutdown':
 		print_responce({"status":1,"message":"shutting-down"})
-		r = subprocess.run(shlex.split('shutdown now'))
+		subprocess.run("nohup sh -c 'sleep 5s; sudo shutdown now' 1>/dev/null 2>&1 &",shell=True)
 	case 'rescan':
 		print_responce(job_status(1))
 	case 'update':

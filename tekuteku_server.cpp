@@ -63,7 +63,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-02-19";
+static std::string m_version = "build 2026-03-26";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-server.log";
@@ -561,6 +561,7 @@ class target_parser_t {
 public:
 	target_parser_t( const std::string url ) { parse(url); };
 	void parse( const std::string& url ) {
+		m_url = url;
 		std::string::size_type i_query = url.find("?");
 		std::string::size_type i_anchor = url.find("#");
 		m_path = url.substr(0,i_query);
@@ -581,8 +582,9 @@ public:
 			if ( jj == std::string::npos ) jj = query.size();
 		}
 	};
-	std::string path() const { return m_path; };
-	std::string path_ex() const { return m_path_ex; };
+	std::string path() const { return m_path; }
+	std::string path_ex() const { return m_path_ex; }
+	std::string url() const { return m_url; }
 	std::vector<std::string> params() const {
 		std::vector<std::string> r;
 		std::for_each(m_params.begin(),m_params.end(),[&r]( const auto& c ){ r.emplace_back(c.first+"="+c.second); });
@@ -597,6 +599,7 @@ private:
 	std::string m_path;
 	std::string m_path_ex;
 	std::vector<std::pair<std::string,std::string>> m_params;
+	std::string m_url;
 };
 
 bool is_accessible( const std::string& f ) {
@@ -680,6 +683,8 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 				return reply(internal_error((boost::format("error %s") % ec.message()).str()));
 			}
 		}
+		c.wait();
+		log((boost::format("done %s\n") % t.url()).str());
 		x = x.substr(x.find("\n\n")+2);
 		res.set(beast::http::field::content_type,"text/plain");
 		res.content_length(x.size());
