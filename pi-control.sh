@@ -6,7 +6,7 @@ import json
 import time
 import re
 
-version = '2026-03-26'
+version = '2026-03-30'
 wifi_dev = 'wlan0'
 
 def get_key(text):
@@ -67,7 +67,7 @@ def job_status(force_rescan):
 				wifi_dev = ss[1]
 				break
 
-	# signal >= 60 のみを利用可とする。
+	# signal >= 56 のみを利用可とする <- nmcli dev wifi list での色分け
 	wifi = []
 	o = "-rescan yes" if force_rescan == 1 else ""
 	r = subprocess.run(shlex.split('nmcli -g SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
@@ -77,7 +77,7 @@ def job_status(force_rescan):
 			ss = s.split(':')
 			ssid = ss[0]
 			signal = int(ss[1])
-			if signal >= 60: wifi.append(ssid)
+			if signal >= 56: wifi.append(ssid)
 
 	for c in connections.values():
 		if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
