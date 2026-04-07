@@ -5,9 +5,13 @@ import subprocess
 import json
 import time
 import re
+import logging
 
 version = '2026-03-30'
 wifi_dev = 'wlan0'
+
+logging.basicConfig(filename='pi-control.log',level=logging.INFO,format='%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s')
+logger = logging.getLogger(__name__)
 
 def get_key(text):
 	i = text.find('=')
@@ -177,3 +181,5 @@ match job:
 		print_responce(job_wpa2_enterprise(ssid,username,password))
 	case _:
 		print_responce({"status":0,"message":"unknown job={0}".format(job)})
+
+logger.info("job={0}".format(job))
