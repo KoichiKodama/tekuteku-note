@@ -7,6 +7,10 @@
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
 	#include <iphlpapi.h>
+	#ifdef MSIX
+	#include <shlwapi.h>
+	#include <winrt/Windows.Storage.h>
+	#endif
 #else
 	#include <unistd.h>
 	#include <sys/types.h>
@@ -51,6 +55,11 @@
 	#pragma comment(lib,"shell32.lib")
 	#pragma comment(lib,"ws2_32.lib")
 	#pragma comment(lib,"iphlpapi.lib")
+	#ifdef MSIX
+	#pragma comment(lib,"shlwapi.lib")
+	#pragma comment(lib,"RuntimeObject.lib")
+	#endif
+	#define tzset _tzset
 #endif
 
 #ifndef USE_SSL
@@ -63,10 +72,11 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-03-26";
+static std::string m_version = "build 2026-04-18";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
-static std::string m_logfile = "tekuteku-server.log";
+static std::string m_logfile = "tekuteku-note.log";
+static std::string m_package_folder = ".";
 static std::mutex m_mutex_log;
 static int debug_async_accept = 0;
 static int debug_async_read = 0;
@@ -157,7 +167,7 @@ bool enum_network( std::vector<network_t>& result ) {
 	pTable = (PMIB_IPADDRTABLE)malloc(dwSize);
 	if ( GetIpAddrTable(pTable,&dwSize,FALSE) != NO_ERROR ) return false;
 	address_ipv4_t loopback(127,0,0,1);
-	for (auto i=0;i<pTable->dwNumEntries;i++) {
+	for (DWORD i=0;i<pTable->dwNumEntries;i++) {
 		MIB_IPADDRROW& e = pTable->table[i];
 		if ( e.dwAddr == loopback.c ) continue;
 		if ( e.wType & MIB_IPADDR_DISCONNECTED ) continue;
@@ -284,6 +294,11 @@ asio::io_context ioc_x(6);
 static std::thread thread_x{};
 request_broadcast_event_t request_broadcast;
 
+bool is_localhost( const std::string& id ) {
+	const std::string localhost = "127.0.0.1";
+	return id.compare(0,localhost.size(),localhost) == 0;
+}
+
 void broadcast_status( asio::yield_context yield ) {
 	nlohmann::json j_whiteboard = nlohmann::json::array();
 	nlohmann::json j_whiteboard_full = nlohmann::json::array();
@@ -306,7 +321,7 @@ void broadcast_status( asio::yield_context yield ) {
 					c.tobe_sent = false;
 				}
 			}
-			whiteboard_updated_index = m_whiteboard.size();
+			whiteboard_updated_index = static_cast<int>(m_whiteboard.size());
 			whiteboard_updated = false;
 			debug_whiteboard_update++;
 		}
@@ -351,10 +366,9 @@ void broadcast_status( asio::yield_context yield ) {
 		#ifndef USE_SSL
 		if ( network_changed == true ) {
 			network_changed = false;
-			const std::string localhost = "127.0.0.1";
 			for (auto& e:m_takers) {
 				const taker_info_t& info = e.second;
-				if ( info.id.compare(0,localhost.size(),localhost) == 0 ) {
+				if ( is_localhost(info.id) ) {
 					std::shared_ptr<websocket_stream_t> p_ws = e.first;
 					nlohmann::json x;
 					x["type"] = 0;
@@ -394,6 +408,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 			const std::string a = (*ii).address.to_string();
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
+		if ( m_package_folder != "." && is_localhost(info.id) ) r["package_folder"] = m_package_folder;
 		if ( m_cfg.contains("yyprobe") ) r["yyprobe"] = m_cfg["yyprobe"];
 		if ( m_cfg.contains("vosk") ) r["vosk"] = m_cfg["vosk"];
 		if ( m_cfg.contains("whisper") ) r["whisper"] = m_cfg["whisper"];
@@ -435,7 +450,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 				if ( status == 2 ) {
 					// 新規音声認識セッション開始
 					std::for_each(m_whiteboard.begin()+info.whiteboard_voice_index,m_whiteboard.end(),[&info]( auto& c ){ if ( info.num == c.num ) { c.id = -1; if ( c.edit == 2 ) c.edit = 0; } });
-					info.whiteboard_voice_index = m_whiteboard.size();
+					info.whiteboard_voice_index = static_cast<int>(m_whiteboard.size());
 				}
 				if ( json_i.contains("text") == true ) {
 					std::string text = json_i["text"];
@@ -458,6 +473,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 						}
 						else log((boost::format("unexpected text %s %d '%s'\n") % info.id % text_index % text).str());
 						whiteboard_updated = true;
+						if ( m_whiteboard.size() > std::numeric_limits<int>::max() ) throw std::runtime_error("whiteboard.size() exceeds");
 					}
 					else {
 						info.text = text;
@@ -502,7 +518,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 						const int id_fixed = json_i["voice_fixed"];
 						auto ii = m_whiteboard.begin()+info.whiteboard_voice_index;
 						auto jj = std::find_if(ii,m_whiteboard.end(),[id_fixed,&info]( const auto& c ){ return ( c.num == info.num && c.id == id_fixed ); });
-						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = std::distance(m_whiteboard.begin(),++jj); // voice_fixed が前と同じ場合には見つからない
+						if ( jj != m_whiteboard.end() ) info.whiteboard_voice_index = static_cast<int>(std::distance(m_whiteboard.begin(),++jj)); // voice_fixed が前と同じ場合には見つからない
 					}
 					whiteboard_updated = true;
 				}
@@ -634,7 +650,7 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 		return res;
 	};
 	auto bad_request = [&response]( const std::string& msg ){ return response(beast::http::status::bad_request,msg); };
-	auto not_found = [&response]( const std::string& msg ){ return response(beast::http::status::not_found,msg); };
+	auto not_found = [&response]( const std::string& msg ){ return response(beast::http::status::not_found,msg+"(current="+std::filesystem::current_path().string()+")"); };
 	auto internal_error = [&response]( const std::string& msg ){ return response(beast::http::status::internal_server_error,msg); };
 	reply_t reply{stream,yield};
 
@@ -809,7 +825,20 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 
 int main( int argc, char** argv ) {
 	try {
-		std::string fname_config = "config.json";
+		#ifdef MSIX
+		{
+		TCHAR szPath[MAX_PATH];
+		GetModuleFileName(NULL,szPath,MAX_PATH);
+		PathRemoveFileSpec(szPath);
+		SetCurrentDirectory(szPath); // Microsoft Store で公開する ( msix ) 場合、起動フォルダを明示的に指定する。
+
+		winrt::init_apartment();
+		winrt::Windows::Storage::StorageFolder localFolder = winrt::Windows::Storage::ApplicationData::Current().LocalFolder(); // LocalState フォルダの取得
+		m_package_folder = std::filesystem::path(localFolder.Path().c_str()).string(); // フルパスを文字列として取得
+		}
+		#endif
+
+		std::string fname_config = (boost::format("%s/config.json") % m_package_folder).str();
 		argc--; argv++;
 		while ( argc != 0 ) {
 			if ( strcmp(*argv,"--config") == 0 ) { argc--; argv++; fname_config = *argv; }
@@ -818,17 +847,20 @@ int main( int argc, char** argv ) {
 		}
 		{
 			std::ifstream f(fname_config);
-			if ( f.is_open() ) m_cfg = nlohmann::json::parse(f);
+			if (f.is_open()) m_cfg = nlohmann::json::parse(f);
 		}
 
 		if ( m_cfg.contains("port") ) {
 			m_port = m_cfg["port"].get<int>();
-			m_logfile = ( boost::format("tekuteku-server-%04d.log") % m_port ).str();
+			m_logfile = (boost::format("%s/tekuteku-note-%04d.log") % m_package_folder % m_port).str();
 		}
+		else m_logfile = (boost::format("%s/tekuteku-note.log") % m_package_folder).str();
+
 		if ( m_cfg.contains("magic") ) m_magic = m_cfg["magic"].get<std::string>();
 		if ( m_cfg.contains("broadcast_interval") ) request_broadcast.set_interval(m_cfg["broadcast_interval"].get<int>());
-
 		truncate_log();
+		log((boost::format("package_folder = %s\n") % m_package_folder).str());
+
 		#ifdef USE_SSL
 		std::string key = m_cfg["ssl"][0].get<std::string>();
 		std::string crt = m_cfg["ssl"][1].get<std::string>();

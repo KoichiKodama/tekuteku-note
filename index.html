@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-03-27</title>
+<title>てくてくノート ver 2026-04-18</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -45,13 +45,7 @@
 	<div class="input-group">
 		<div class="btn-group ms-2 my-2"><button class="btn btn-outline-info" id="setup-processlocally">ローカル音声認識設定</button></div>
 		<div class="btn-group ms-2 my-2"><button class="btn btn-outline-warning" id="clear">テイクをクリア</button></div>
-		<div class="dropdown ms-2 my-2" id="pi">
-			<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ラズパイ</button>
-			<ul class="dropdown-menu">
-			<li><button class="dropdown-item" data-pi="shutdown">シャットダウン</button></li>
-			<li><a class="dropdown-item" data-pi="control" href="./pi.html" target="ラズパイコントロール">制御ページ</a></li>
-			</ul>
-		</div>
+		<div class="btn-group ms-2 my-2" id="etc"></div>
 	</div>
 </div>
 </div>
@@ -121,14 +115,14 @@
 </div>
 </div>
 
-<div class="modal fade" id="dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="host-modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
 <div class="modal-dialog">
 <div class="modal-content">
 	<div class="modal-body">
 		<div class="alert alert-warning text-center">サーバアドレスが複数あります。１つ選んで下さい</div>
-		<select class="form-select" id="dialog-select"></select>
+		<select class="form-select" id="host-select"></select>
 	</div>
-	<div class="modal-footer"><button type="button" class="btn btn-primary" id="dialog-button-ok">決定</button></div>
+	<div class="modal-footer"><button type="button" class="btn btn-primary" id="host-ok">決定</button></div>
 </div>
 </div>
 </div>
@@ -160,6 +154,29 @@
 	</div>
 </div>
 </div>
+</div>
+
+<div class="modal fade" id="msix-modal" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal-dialog">
+<div class="modal-content">
+	<div class="modal-header">
+		<h5 class="modal-title">てくてくノートのログファイルの場所</h5>
+		<button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="close"></button>
+	</div>
+	<div class="modal-body">
+		<p class="modal-text">
+		Microsoft Store からインストールした場合、ログは下のパス（フォルダ）に保存されています。
+		ブラウザからは直接開けないので、パスをコピーし、エクスプローラなどを使って開いて下さい。
+		</p>
+		<div class="modal-text" id="msix-package-folder"></div>
+	</div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-secondary" id="msix-copy"></button>
+		<button type="button" class="btn btn-primary" data-bs-dismiss="modal">閉じる</button>
+	</div>
+</div>
+</div>
+</div>
 
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
 <script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
@@ -169,6 +186,7 @@
 <script type="text/javascript">
 'use strict';
 
+var package_folder = ""; // msix でインストールした際の LocalState の場所
 var tekuteku_url = "";
 var taker_name = "";
 var screen_mode = 0; // 0:標準, 1:見るだけ, 2:字幕表示
@@ -182,7 +200,6 @@ var socket;
 var keep_alive = false;
 var host = ""; // tekuteku_server の URL
 var id;	// 自分自身の識別子
-var dialog;
 var whiteboard = [];
 var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
 var my_text_previous = '';
@@ -445,7 +462,7 @@ async function recognizer_amivoice() {
 	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
 	Wrp.epi = '60000'; // ワンタイム APPKEY の有効期間（ミリ秒）
-	Wrp.grammarFileNames = '-a2-ja-general'; // 日本語 -a2-ja-general / 多言語 -a2-multi-general
+	Wrp.grammarFileNames = '-a2-ja-general'; // 日本語 -a2-ja-general / 多言語 -a2-multi-general / 日本語汎用 -a-general
 
 	function update_result(result,is_final) {
 		let text = html_encode(amivoice_parse(result).text);
@@ -529,29 +546,6 @@ async function recognizer_default( is_local = false ) {
 	sprec.maxAlternatives = 1;
 	sprec.lang = 'ja-JP';
 	sprec.processLocally = is_local;
-
-/*	if ( typeof SpeechRecognition.available === 'function' ) {
-		let rc = await SpeechRecognition.available({langs:["ja-JP"],processLocally:true,});
-		console.log('SpeechRecognition.available='+rc);
-		if ( rc === "downloadable" ) {
-			let x = new bootstrap.Modal($('#local').get(0),{});
-			let d = new Promise((resolve)=>{
-				$('#local-ok').one('click',async ()=>{
-					let rc = await SpeechRecognition.install({langs:["ja-JP"],processLocally:true,});
-					console.log("install->"+rc);
-					sprec.processLocally = rc;
-					x.hide();
-				});
-			});
-			$('#local')
-				.off('hidden.bs.modal')
-				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
-			x.show();
-			await d;
-		}
-		else sprec.processLocally = ( rc === "available" ? true : false );
-		console.log('SpeechRecognition.processLocally='+sprec.processLocally);
-	}*/
 
 	sprec.onresult = function(event){
 		// 未確定の結果は、まとめてから処理する。
@@ -775,20 +769,20 @@ async function host_select(hosts) {
 	if ( is_localhost() == true ) {
 		if ( hosts === undefined || hosts.length == 0 ) { $('#host').text("ネットワークにつながっていません").removeClass(k_success).addClass(k_warning); return; }
 		if ( hosts.length >= 2 ) {
-			$('#dialog-select').empty();
-			hosts.forEach((c)=>{ $('#dialog-select').append($('<option>').text(c).val(c)); });
-			let x = new bootstrap.Modal($('#dialog').get(0),{});
-			let dialog = new Promise((resolve)=>{
-				$('#dialog-button-ok').one('click',()=>{
-					host=$('#dialog-select > option:selected').val();
+			$('#host-select').empty();
+			hosts.forEach((c)=>{ $('#host-select').append($('<option>').text(c).val(c)); });
+			let x = new bootstrap.Modal('#host-modal',{});
+			let d = new Promise((resolve)=>{
+				$('#host-ok').one('click',()=>{
+					host=$('#host-select > option:selected').val();
 					x.hide();
 				});
-				$('#dialog')
+				$('#host-modal')
 					.off('hidden.bs.modal')
 					.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
 				x.show();
 			});
-			const result = await dialog;
+			await d;
 		}
 		else { host = hosts[0]; }
 		message += 'このアドレスを他の人に通知して下さい。';
@@ -842,6 +836,25 @@ async function receive(event) {
 	case 0 :
 		id = response.id;
 		host_select(response.server);
+		if ( 'package_folder' in response ) {
+			package_folder = response['package_folder'].replace("\\","/");
+			if ( package_folder.length != 0 ) {
+				$('#etc').html('<button class="btn btn-outline-secondary" id="msix">アプリ設定</button>');
+				$('#msix').on('click',async ()=>{
+					$('#msix-package-folder').text(package_folder);
+					$('#msix-copy').text('パスをコピー')
+					let x = new bootstrap.Modal('#msix-modal',{});
+					let d = new Promise((resolve)=>{
+						$('#msix-modal')
+							.off('hidden.bs.modal')
+							.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
+						x.show();
+					});
+					await d;
+				});
+				$('#msix-copy').on('click',()=>{ navigator.clipboard.writeText($('#msix-package-folder').text()).then(()=>{ $('#msix-copy').text('コピー済'); }); });
+			}
+		}
 		if ( 'yyprobe' in response ) token['yyprobe'] = response['yyprobe'];
 		if ( 'vosk' in response ) token['vosk'] = response['vosk'];
 		if ( 'whisper' in response ) token['whisper'] = response['whisper'];
@@ -1236,15 +1249,6 @@ function pi_check_network() {
 		.fail(()=>{ alert("ラズパイとの通信エラーです"); })
 }
 
-$('#pi').on('hide.bs.dropdown',({clickEvent})=>{
-	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
-		if ( $(clickEvent.target).data('pi') == 'shutdown' ) {
-			if ( window.confirm('ラズパイをシャットダウンして良いですか？') == false ) return;
-			$.ajax("./pi-control.sh?job=shutdown",{method:'get',async:true,dataType:'json',timeout:0}).fail(()=>{ alert("ラズパイとの通信エラーです"); });
-		}
-	}
-});
-
 if (use_voice_recognition()) {
 	// ローカル音声認識確認
 	check_processlocally().then(async (c)=>{
@@ -1256,7 +1260,7 @@ if (use_voice_recognition()) {
 				c.available.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',true).parent().show(); });
 				c.downloadable.forEach((lang)=>{ $(`#processlocally input[type="checkbox"][value="${lang}"]`).prop('checked',false).parent().show(); });
 				$('#processlocally-ok').prop('disabled',( c.downloadable.length == 0 ));
-				let x = new bootstrap.Modal($('#processlocally').get(0),{});
+				let x = new bootstrap.Modal('#processlocally',{});
 				let d = new Promise((resolve)=>{
 					$('#processlocally-ok').one('click',async function(){
 						$('#processlocally input[type="checkbox"]:checked').each(async function(){
@@ -1270,19 +1274,38 @@ if (use_voice_recognition()) {
 						.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });
 					x.show();
 				});
-				const rc = await d;
+				await d;
 			});
 		}
 		else $('#setup-processlocally').hide();
 	});
 }
-$('#pi').hide();
+
 switch (location.protocol) {
 	case 'https:':
 		host = location.host;
 		tekuteku_url = "wss://"+location.host+location.search;
 		$('#clear').parent().show();
-		fetch('./pi.html').then((r)=>{ if ( r.status == 200 ) { pi_check_network(); $('#pi').show(); } });
+		fetch('./pi.html').then((r)=>{
+			if ( r.status != 200 ) return;
+			pi_check_network();
+			$('#etc').html(
+				'<div class="dropdown" id="pi">'+
+				'<button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" value="none">ラズパイ</button>'+
+				'<ul class="dropdown-menu">'+
+				'<li><button class="dropdown-item" data-pi="shutdown">シャットダウン</button></li>'+
+				'<li><a class="dropdown-item" data-pi="control" href="./pi.html" target="ラズパイコントロール">制御ページ</a></li>'+
+				'</ul>'+
+				'</div>');
+			$('#pi').on('hide.bs.dropdown',({clickEvent})=>{
+				if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
+					if ( $(clickEvent.target).data('pi') == 'shutdown' ) {
+						if ( window.confirm('ラズパイをシャットダウンして良いですか？') == false ) return;
+						$.ajax("./pi-control.sh?job=shutdown",{method:'get',async:true,dataType:'json',timeout:0}).fail(()=>{ alert("ラズパイとの通信エラーです"); });
+					}
+				}
+			});
+		});
 		break;
 	case 'http:':
 		host = location.host;
