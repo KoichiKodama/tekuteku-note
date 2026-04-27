@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-04-18</title>
+<title>てくてくノート ver 2026-04-25</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -168,7 +168,7 @@
 		Microsoft Store からインストールした場合、ログは下のパス（フォルダ）に保存されています。
 		ブラウザからは直接開けないので、パスをコピーし、エクスプローラなどを使って開いて下さい。
 		</p>
-		<div class="modal-text" id="msix-package-folder"></div>
+		<div class="modal-text text-break" id="msix-package-folder"></div>
 	</div>
 	<div class="modal-footer">
 		<button type="button" class="btn btn-secondary" id="msix-copy"></button>
@@ -837,7 +837,7 @@ async function receive(event) {
 		id = response.id;
 		host_select(response.server);
 		if ( 'package_folder' in response ) {
-			package_folder = response['package_folder'].replace("\\","/");
+			package_folder = response['package_folder'];
 			if ( package_folder.length != 0 ) {
 				$('#etc').html('<button class="btn btn-outline-secondary" id="msix">アプリ設定</button>');
 				$('#msix').on('click',async ()=>{

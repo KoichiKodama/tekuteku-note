@@ -1,16 +1,19 @@
-﻿#ifdef _WINDOWS
-	#include <SDKDDKVer.h>
+﻿#ifdef MSIX
+#define BOOST_BEAST_USE_WIN32_FILE 0
+#endif
+
+#ifdef _WINDOWS
+	#ifndef WIN32_LEAN_AND_MEAN
 	#define WIN32_LEAN_AND_MEAN
+	#endif
 	#define NOMINMAX
 	#include <windows.h>
-	#include <shellapi.h>
-	#include <winsock2.h>
-	#include <ws2tcpip.h>
-	#include <iphlpapi.h>
-	#ifdef MSIX
-	#include <shlwapi.h>
+	#include <winrt/Windows.System.h>
 	#include <winrt/Windows.Storage.h>
-	#endif
+	#include <winrt/Windows.Foundation.h>
+	#include <winrt/Windows.Foundation.Collections.h>
+	#include <winrt/Windows.Networking.Connectivity.h>
+	#include <winrt/Windows.UI.Popups.h>
 #else
 	#include <unistd.h>
 	#include <sys/types.h>
@@ -43,23 +46,18 @@
 	#include <boost/beast/websocket/ssl.hpp>
 #endif
 #include <boost/format.hpp>
-#include <boost/process/v2/popen.hpp>
-#include <boost/process/v2/environment.hpp>
-#include <boost/process/v2/start_dir.hpp>
+#ifndef MSIX
+	#include <boost/process/v2/popen.hpp>
+	#include <boost/process/v2/environment.hpp>
+	#include <boost/process/v2/start_dir.hpp>
+#endif
 
 #include <json.hpp>
 #include <tray.hpp>
 
 #ifdef _WINDOWS
-	#pragma comment(lib,"user32.lib")
-	#pragma comment(lib,"shell32.lib")
-	#pragma comment(lib,"ws2_32.lib")
-	#pragma comment(lib,"iphlpapi.lib")
-	#ifdef MSIX
-	#pragma comment(lib,"shlwapi.lib")
 	#pragma comment(lib,"RuntimeObject.lib")
-	#endif
-	#define tzset _tzset
+	#pragma comment(lib,"WindowsApp.lib")
 #endif
 
 #ifndef USE_SSL
@@ -72,7 +70,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-04-18";
+static std::string m_version = "build 2026-04-27";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-note.log";
@@ -85,15 +83,24 @@ static int debug_write_full = 0;
 static int debug_whiteboard_update = 0;
 
 std::string k_date_time( int days_off = 0 ) {
-	tzset();
-	time_t t = time(nullptr);
-	tm* l = localtime(&t);
+	std::time_t t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	tm l;
+	#ifdef _WINDOWS
+	localtime_s(&l,&t);
 	if ( days_off != 0 ) {
-		l->tm_mday -= days_off;
-		t = mktime(l);
-		l = localtime(&t);
+		l.tm_mday -= days_off;
+		t = mktime(&l);
+		localtime_s(&l,&t);
 	}
-	return ( boost::format("%04d-%02d-%02d %02d:%02d:%02d") % (l->tm_year+1900) % (l->tm_mon+1) % (l->tm_mday) % (l->tm_hour) % (l->tm_min) % (l->tm_sec) ).str();
+	#else
+	localtime_r(&t,&l);
+	if ( days_off != 0 ) {
+		l.tm_mday -= days_off;
+		t = mktime(&l);
+		localtime_r(&t,&l);
+	}
+	#endif
+	return ( boost::format("%04d-%02d-%02d %02d:%02d:%02d") % (l.tm_year+1900) % (l.tm_mon+1) % (l.tm_mday) % (l.tm_hour) % (l.tm_min) % (l.tm_sec) ).str();
 }
 
 void truncate_log() {
@@ -120,7 +127,15 @@ bool log( const std::string& message, bool truncate = false ) {
 	std::ios_base::openmode mode = ( truncate ? std::ios_base::trunc : std::ios_base::app );
 	std::ofstream out(m_logfile,mode);
 	if (!out) return false;
-	out << k_date_time() << " " << message;
+	out << k_date_time() << " " << message << "\n";
+	return true;
+}
+
+bool log( const boost::format& fmt, bool truncate = false ) {
+	std::ios_base::openmode mode = ( truncate ? std::ios_base::trunc : std::ios_base::app );
+	std::ofstream out(m_logfile,mode);
+	if (!out) return false;
+	out << k_date_time() << " " << fmt.str() << "\n";
 	return true;
 }
 
@@ -142,6 +157,11 @@ struct address_ipv4_t {
 		b[2] = (uint8_t)a2;
 		b[3] = (uint8_t)a3;
 	};
+	address_ipv4_t( const std::string& s ) {
+		int i=0;
+		const std::regex separator("\\.");
+		for (std::sregex_token_iterator ii(s.begin(),s.end(),separator,-1),end;ii!=end;ii++) b[i++] = static_cast<uint8_t>(std::stol(*ii));
+	};
 	uint32_t get( int i ) const { return (uint32_t)b[i]; };
 	std::string to_string() const { return ( boost::format("%u.%u.%u.%u") % get(0) % get(1) % get(2) % get(3) ).str(); };
 	union {
@@ -161,23 +181,17 @@ struct network_t {
 bool enum_network( std::vector<network_t>& result ) {
 	result.clear();
 	#ifdef _WINDOWS
-	PMIB_IPADDRTABLE pTable = NULL;
-	DWORD dwSize = 0;
-	if ( GetIpAddrTable(pTable,&dwSize,FALSE) != ERROR_INSUFFICIENT_BUFFER ) return false;
-	pTable = (PMIB_IPADDRTABLE)malloc(dwSize);
-	if ( GetIpAddrTable(pTable,&dwSize,FALSE) != NO_ERROR ) return false;
 	address_ipv4_t loopback(127,0,0,1);
-	for (DWORD i=0;i<pTable->dwNumEntries;i++) {
-		MIB_IPADDRROW& e = pTable->table[i];
-		if ( e.dwAddr == loopback.c ) continue;
-		if ( e.wType & MIB_IPADDR_DISCONNECTED ) continue;
-		network_t net;
-		net.address.c = e.dwAddr;
-		net.mask.c = e.dwMask;
-		net.broadcast.c = (net.address.c|~(net.mask.c));//	GetIpAddrTable は正しい broadcast を戻さない。
-		result.push_back(net);
+	auto l = winrt::Windows::Networking::Connectivity::NetworkInformation::GetHostNames();
+	for (const winrt::Windows::Networking::HostName& c : l) {
+		if ( c.IPInformation() && c.Type() == winrt::Windows::Networking::HostNameType::Ipv4 ) {
+			network_t net;
+			net.address.c = address_ipv4_t(winrt::to_string(c.CanonicalName())).c;
+			net.mask.c = (0xffffffff)>>(32-static_cast<uint8_t>(c.IPInformation().PrefixLength().Value()));
+			net.broadcast.c = (net.address.c|~(net.mask.c));
+			if ( net.address != loopback ) result.push_back(net);
+		}
 	}
-	free(pTable);
 	#else
 	struct ifaddrs *ifa,*i;
 	if ( getifaddrs(&ifa) == 0 ) {
@@ -358,9 +372,9 @@ void broadcast_status( asio::yield_context yield ) {
 				beast::flat_buffer b = copy_to_buffer(x.dump());
 				boost::system::error_code ec;
 				p_ws->async_write(b.data(),yield[ec]); debug_write++;
-				if (ec) log((boost::format("write error %s (%s)\n") % t.id % ec.message()).str());
+				if (ec) log(boost::format("write error %s (%s)") % t.id % ec.message());
 			}
-			else log((boost::format("write skipped %s\n") % t.id).str());
+			else log(boost::format("write skipped %s") % t.id);
 		}
 
 		#ifndef USE_SSL
@@ -382,7 +396,7 @@ void broadcast_status( asio::yield_context yield ) {
 					beast::flat_buffer b = copy_to_buffer(x.dump());
 					boost::system::error_code ec;
 					p_ws->async_write(b.data(),yield[ec]); debug_write++;
-					if (ec) log((boost::format("error notify network change to %s (%s)\n") % info.id % ec.message()).str());
+					if (ec) log(boost::format("error notify network change to %s (%s)") % info.id % ec.message());
 				}
 			}
 		}
@@ -419,19 +433,19 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 		p_ws->async_write(b.data(),yield[ec]); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
 		m_takers[p_ws] = info;
 		request_broadcast.set();
-		log((boost::format("session start %s total=%d\n") % info.id % m_takers.size()).str());
+		log(boost::format("session start %s total=%d") % info.id % m_takers.size());
 
 		for (;;) {
 			taker_info_t& info = m_takers[p_ws];
 			beast::flat_buffer buffer;
 			p_ws->async_read(buffer,yield[ec]); debug_async_read++;
 			if ( ec == beast::websocket::error::closed ) {
-				log((boost::format("read close %s\n") % info.id).str());
+				log(boost::format("read close %s") % info.id);
 				break;
 			}
 			// SSL 接続で ec == asio::ssl::error::stream_truncated を除外した為に無限ループになったと推測。
 			if (ec) {
-				log((boost::format("read error %s (%s)\n") % info.id % ec.message()).str());
+				log(boost::format("read error %s (%s)") % info.id % ec.message());
 				break;
 			}
 			std::string s = beast::buffers_to_string(buffer.data());
@@ -439,7 +453,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 				nlohmann::json json_i = nlohmann::json::parse(s);
 				int status = json_i["status"];
 				if ( status == 8 ) {
-					log((boost::format("clear whiteboard by %s\n") % info.id).str());
+					log(boost::format("clear whiteboard by %s") % info.id);
 					log_whiteboard();
 					m_whiteboard.clear();
 					std::for_each(m_takers.begin(),m_takers.end(),[]( auto& e ){ e.second.whiteboard_voice_index = 0; });
@@ -471,7 +485,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 							}
 							else m_whiteboard.push_back(whiteboard_element_t(text,-1,info.num)); // 未確定の音声認識結果で削除されたものを編集した場合
 						}
-						else log((boost::format("unexpected text %s %d '%s'\n") % info.id % text_index % text).str());
+						else log(boost::format("unexpected text %s %d '%s'") % info.id % text_index % text);
 						whiteboard_updated = true;
 						if ( m_whiteboard.size() > std::numeric_limits<int>::max() ) throw std::runtime_error("whiteboard.size() exceeds");
 					}
@@ -525,10 +539,10 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 				request_broadcast.set();
 			}
 		}
-		log((boost::format("session stop %s\n") % info.id).str());
+		log(boost::format("session stop %s") % info.id);
 	}
-	catch ( boost::system::system_error& e ) { log((boost::format("boost exception in exec_websocket_session %s : %s\n") % info.id % e.what()).str()); }
-	catch ( std::exception& e ) { log((boost::format("exception in exec_websocket_session %s : %s\n") % info.id % e.what()).str()); }
+	catch ( boost::system::system_error& e ) { log(boost::format("boost exception in exec_websocket_session %s : %s") % info.id % e.what()); }
+	catch ( std::exception& e ) { log(boost::format("exception in exec_websocket_session %s : %s") % info.id % e.what()); }
 
 	// 編集中と音声認識中の行を確定しておく
 	for (int i=0;i<m_whiteboard.size();i++) {
@@ -540,7 +554,7 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 		whiteboard_updated = true;
 	}
 	m_takers.erase(p_ws);
-	log((boost::format("session terminated total=%d\n") % m_takers.size()).str());
+	log(boost::format("session terminated total=%d") % m_takers.size());
 	request_broadcast.set();
 }
 
@@ -565,11 +579,11 @@ struct reply_t {
 
 	reply_t( tcp_stream_t& stream, asio::yield_context yield ) : m_stream(stream),m_yield(yield) {};
 	template<class body> void operator()( beast::http::response<body>&& msg ) const {
-//		if ( msg.need_eof() ) log("unexpected need_eof() = true in reply_t\n");
+//		if ( msg.need_eof() ) log("unexpected need_eof() = true in reply_t");
 		beast::http::response_serializer<body> s{msg};
 		beast::error_code ec;
 		beast::http::async_write(m_stream,s,m_yield[ec]);
-		if (ec) log((boost::format("reply_t write error %s\n") % ec.message()).str());
+		if (ec) log(boost::format("reply_t write error %s") % ec.message());
 	};
 };
 
@@ -676,11 +690,14 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 
 	if ( req.method() != beast::http::verb::get && req.method() != beast::http::verb::head ) return reply(bad_request("unsupported http-method"));
 	if ( is_accessible(t.path()) == false ) {
-		log((boost::format("exec_http_session rejected '%s'\n") % t.path()).str());
+		log(boost::format("exec_http_session rejected '%s'") % t.path());
 		return reply(not_found(t.path()));
 	}
 
 	if ( t.path_ex() == "sh" ) {
+		#ifdef MSIX
+		return reply(not_found(t.path()));
+		#else
 		beast::http::response<beast::http::string_body> res{beast::http::status::ok,req.version()};
 		res.set(beast::http::field::server,m_server_name);
 		res.keep_alive(req.keep_alive());
@@ -695,17 +712,18 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 			x += xx;
 			if (ec) {
 				if ( ec == asio::error::eof ) break;
-				log((boost::format("exec_http_session process %s error %s\n") % t.path() % ec.message()).str());
+				log(boost::format("exec_http_session process %s error %s") % t.path() % ec.message());
 				return reply(internal_error((boost::format("error %s") % ec.message()).str()));
 			}
 		}
 		c.wait();
-		log((boost::format("done %s\n") % t.url()).str());
+		log(boost::format("done %s") % t.url());
 		x = x.substr(x.find("\n\n")+2);
 		res.set(beast::http::field::content_type,"text/plain");
 		res.content_length(x.size());
 		res.body() = std::move(x);
 		return reply(std::move(res));
+		#endif
 	}
 	else {
 		beast::http::response<beast::http::file_body> res{beast::http::status::ok,req.version()};
@@ -725,28 +743,30 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 
 #ifdef USE_SSL
 void exec_listen( asio::io_context& ioc, asio::ssl::context& ctx, asio::ip::tcp::endpoint endpoint, asio::yield_context yield ) {
+	boost::system::error_code ec;
 	asio::ip::tcp::acceptor acceptor(ioc);
 	acceptor.open(endpoint.protocol());
 	acceptor.set_option(asio::socket_base::reuse_address(true));
-	acceptor.bind(endpoint);
+	acceptor.bind(endpoint,ec);
+	if (ec) { log(boost::format("exec_listen bind error %s") % ec.message()); }
 	acceptor.listen(asio::socket_base::max_listen_connections);
 	for (;;) {
 		socket_t socket(ioc);
-		boost::system::error_code ec;
 		acceptor.async_accept(socket,yield[ec]);
 		if (!ec) { asio::spawn(ioc,std::bind(&exec_http_session,tcp_stream_t(std::move(socket),ctx),std::placeholders::_1),asio::detached); }
 	}
 }
 #else
 void exec_listen( asio::io_context& ioc, asio::ip::tcp::endpoint endpoint, asio::yield_context yield ) {
+	boost::system::error_code ec;
 	asio::ip::tcp::acceptor acceptor(ioc);
 	acceptor.open(endpoint.protocol());
 	acceptor.set_option(asio::socket_base::reuse_address(true));
-	acceptor.bind(endpoint);
+	acceptor.bind(endpoint,ec);
+	if (ec) { log(boost::format("exec_listen bind error %s") % ec.message()); }
 	acceptor.listen(asio::socket_base::max_listen_connections);
 	for (;;) {
 		socket_t socket(ioc);
-		boost::system::error_code ec;
 		acceptor.async_accept(socket,yield[ec]);
 		if (!ec) { asio::spawn(ioc,std::bind(&exec_http_session,tcp_stream_t(std::move(socket)),std::placeholders::_1)); }
 	}
@@ -757,12 +777,12 @@ void terminate_server() {
 	request_broadcast.stop();
 	ioc_x.stop(); thread_x.join();
 	if (true) log_whiteboard();
-	log((boost::format("debug_async_accept = %d\n") % debug_async_accept).str());
-	log((boost::format("debug_async_read = %d\n") % debug_async_read).str());
-	log((boost::format("debug_write = %d\n") % debug_write).str());
-	log((boost::format("debug_write_full = %d\n") % debug_write_full).str());
-	log((boost::format("debug_whiteboard_update = %d\n") % debug_whiteboard_update).str());
-	log("service stopped\n");
+	log(boost::format("debug_async_accept = %d") % debug_async_accept);
+	log(boost::format("debug_async_read = %d") % debug_async_read);
+	log(boost::format("debug_write = %d") % debug_write);
+	log(boost::format("debug_write_full = %d") % debug_write_full);
+	log(boost::format("debug_whiteboard_update = %d") % debug_whiteboard_update);
+	log("service stopped");
 }
 
 std::string load_file_all( const std::string& fname ) {
@@ -773,7 +793,7 @@ std::string load_file_all( const std::string& fname ) {
 		x.getline(b,sizeof(b));
 		if (x.eof()) break;
 		if (!x) {
-			std::string m = (boost::format("error load_file_all %s\n") % fname).str();
+			std::string m = (boost::format("error load_file_all %s") % fname).str();
 			log(m);
 			throw std::runtime_error(m);
 		}
@@ -814,9 +834,9 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 		if ( enum_network(l) == false ) throw std::runtime_error("enum_network");
 		if ( std::equal(l.begin(),l.end(),m_servers.begin(),m_servers.end(),[]( const network_t& a, const network_t& b ){ return a.address == b.address; }) == false ) {
 			m_servers.swap(l);
-			log("network changed\n");
-			if ( m_servers.empty() ) log("no network\n");
-			std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+			log("network changed");
+			if ( m_servers.empty() ) log("no network");
+			std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log(boost::format("server : %s/%s") % net.address.to_string() % net.mask.to_string()); });
 			network_changed = true;
 			request_broadcast.set();
 		}
@@ -825,24 +845,24 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 
 int main( int argc, char** argv ) {
 	try {
-		#ifdef MSIX
-		{
+		#ifdef _WINDOWS
+		winrt::init_apartment();
 		TCHAR szPath[MAX_PATH];
 		GetModuleFileName(NULL,szPath,MAX_PATH);
-		PathRemoveFileSpec(szPath);
-		SetCurrentDirectory(szPath); // Microsoft Store で公開する ( msix ) 場合、起動フォルダを明示的に指定する。
-
-		winrt::init_apartment();
-		winrt::Windows::Storage::StorageFolder localFolder = winrt::Windows::Storage::ApplicationData::Current().LocalFolder(); // LocalState フォルダの取得
-		m_package_folder = std::filesystem::path(localFolder.Path().c_str()).string(); // フルパスを文字列として取得
-		}
+		std::filesystem::path f = szPath;
+		f.remove_filename();
+		SetCurrentDirectory(f.string().c_str()); // Microsoft Store で公開する ( msix ) 場合、起動フォルダを明示的に指定する。
+		#ifdef MSIX
+		winrt::Windows::Storage::StorageFolder package_folder = winrt::Windows::Storage::ApplicationData::Current().LocalFolder(); // LocalState フォルダの取得
+		m_package_folder = std::filesystem::path(package_folder.Path().c_str()).string(); // フルパスを文字列として取得
+		#endif
 		#endif
 
 		std::string fname_config = (boost::format("%s/config.json") % m_package_folder).str();
 		argc--; argv++;
 		while ( argc != 0 ) {
 			if ( strcmp(*argv,"--config") == 0 ) { argc--; argv++; fname_config = *argv; }
-			else throw std::runtime_error((boost::format("unknown option %s\n") % argv).str());
+			else throw std::runtime_error((boost::format("unknown option %s") % argv).str());
 			argc--; argv++;
 		}
 		{
@@ -859,7 +879,7 @@ int main( int argc, char** argv ) {
 		if ( m_cfg.contains("magic") ) m_magic = m_cfg["magic"].get<std::string>();
 		if ( m_cfg.contains("broadcast_interval") ) request_broadcast.set_interval(m_cfg["broadcast_interval"].get<int>());
 		truncate_log();
-		log((boost::format("package_folder = %s\n") % m_package_folder).str());
+		log(boost::format("package_folder = %s") % m_package_folder);
 
 		#ifdef USE_SSL
 		std::string key = m_cfg["ssl"][0].get<std::string>();
@@ -869,30 +889,34 @@ int main( int argc, char** argv ) {
 		load_server_certificate(ctx,key,crt,chain,pwd);
 		#endif
 
-		std::vector<boost::process::v2::process> m_exec;
 		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
 		std::string tray_name = (boost::format("tekuteku-%04d") % m_port).str().c_str();
 		if ( tray_exist(tray_name.c_str()) == 1 ) {
-			log("stop due to multiple servers\n");
+			log("stop due to multiple servers");
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
 			return 0;
 		}
-//		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) boost::process::spawn(a.get<std::string>()); }
+		#ifndef MSIX
+		std::vector<boost::process::v2::process> m_exec;
 		if ( m_cfg.contains("exec") ) { for (auto& a:m_cfg["exec"]) {
 			std::string exe = "./"+a.get<std::string>()+".exe";
 			m_exec.emplace_back(boost::process::v2::process(ioc_x,exe,{}));
 		}}
 		#endif
+		#endif
 
 		m_whiteboard.reserve(4096);
-		log((boost::format("started %s on port=%d\n") % m_version % m_port).str());
+		log(boost::format("started %s on port=%d") % m_version % m_port);
 		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
-		if ( m_servers.empty() ) log("no network\n");
-		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log((boost::format("server : %s/%s\n") % net.address.to_string() % net.mask.to_string()).str()); });
+		if ( m_servers.empty() ) log("no network");
+		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log(boost::format("server : %s/%s") % net.address.to_string() % net.mask.to_string()); });
 
 		thread_x = std::move(std::thread([]{
 			try {
+				#ifdef MSIX
+				winrt::init_apartment();
+				#endif
 				auto const ep = asio::ip::tcp::endpoint{asio::ip::make_address("0.0.0.0"),m_port};
 				#ifndef USE_SSL
 				asio::spawn(ioc_x,std::bind(&exec_listen,std::ref(ioc_x),ep,std::placeholders::_1));
@@ -904,28 +928,34 @@ int main( int argc, char** argv ) {
 				ioc_x.run();
 				m_takers.clear();
 			}
-			catch ( boost::system::system_error& e ) { log((boost::format("boost exception in thread_x : %s\n") % e.what()).str()); }
+			catch ( boost::system::system_error& e ) { log(boost::format("boost exception in thread_x : %s") % e.what()); }
 		}));
 
 		#ifdef _WINDOWS
 		#ifndef USE_SSL
-		std::string m_host_url = (boost::format("http://localhost:%d") % m_port).str();	// Chrome でマイク使用ブロックを解除できないので localhost を使用する。
+		std::string m_host_url = (boost::format("http://localhost:%d") % m_port).str();
+		#ifdef MSIX
+		winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(winrt::to_hstring(m_host_url)));
+		#else
 		if (!( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",m_host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 )) throw std::runtime_error("spawn_client");
+		#endif
 		#endif
 		#endif
 
 		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
 
 		#ifdef _WINDOWS
+		#ifndef MSIX
 		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
-//		for (auto& proc:m_exec) { proc.terminate(); }
+		for (auto& proc:m_exec) { proc.terminate(); }
+		#endif
 		#endif
 		terminate_server();
 		return 0;
 	}
-	catch ( boost::system::system_error& e ) { log((boost::format("boost exception : %s\n") % e.what()).str()); }
-	catch ( std::exception& e ) { log((boost::format("exception : %s\n") % e.what()).str()); }
-	catch ( ... ) { log("unknown exception\n"); }
+	catch ( boost::system::system_error& e ) { log(boost::format("boost exception : %s") % e.what()); }
+	catch ( std::exception& e ) { log(boost::format("exception : %s") % e.what()); }
+	catch ( ... ) { log("unknown exception"); }
 	#ifdef _WINDOWS
 	MessageBoxW(NULL,L"エラーのため終了します。もう一度動かして下さい。",L"てくてくノートサーバ",MB_OK);
 	#endif
