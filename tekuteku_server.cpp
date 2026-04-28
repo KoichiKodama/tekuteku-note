@@ -70,7 +70,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-04-27";
+static std::string m_version = "build 2026-04-28";
 static std::string m_server_name = "tekuteku-server";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-note.log";
@@ -423,11 +423,21 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
 		if ( m_package_folder != "." && is_localhost(info.id) ) r["package_folder"] = m_package_folder;
+		#ifdef USE_SSL
 		if ( m_cfg.contains("yyprobe") ) r["yyprobe"] = m_cfg["yyprobe"];
 		if ( m_cfg.contains("vosk") ) r["vosk"] = m_cfg["vosk"];
 		if ( m_cfg.contains("whisper") ) r["whisper"] = m_cfg["whisper"];
 		if ( m_cfg.contains("amivoice") ) r["amivoice"] = m_cfg["amivoice"];
 		if ( m_cfg.contains("google-translate") ) r["google-translate"] = m_cfg["google-translate"];
+		#else
+		if ( is_localhost(info.id) ) {
+			if ( m_cfg.contains("yyprobe") ) r["yyprobe"] = m_cfg["yyprobe"];
+			if ( m_cfg.contains("vosk") ) r["vosk"] = m_cfg["vosk"];
+			if ( m_cfg.contains("whisper") ) r["whisper"] = m_cfg["whisper"];
+			if ( m_cfg.contains("amivoice") ) r["amivoice"] = m_cfg["amivoice"];
+			if ( m_cfg.contains("google-translate") ) r["google-translate"] = m_cfg["google-translate"];
+		}
+		#endif
 
 		beast::flat_buffer b = copy_to_buffer(r.dump());
 		p_ws->async_write(b.data(),yield[ec]); debug_write++;	// m_takers 未登録なので broadcast_status とは干渉しない。
