@@ -7,7 +7,7 @@ import time
 import re
 import logging
 
-version = '2026-03-30'
+version = '2026-04-30'
 wifi_dev = 'wlan0'
 
 logging.basicConfig(filename='pi-control.log',level=logging.INFO,format='%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s')
@@ -56,7 +56,7 @@ def job_status(force_rescan):
 			status = ( 1 if device != '--' else 9 )
 			addr = ''
 			if status == 1:
-				cmd = 'nmcli con show {0} | awk \'$1=="IP4.ADDRESS[1]:"{{sub(/\/[0-9]+$/,"",$2); print $2;}}\''.format(name)
+				cmd = 'nmcli con show {0} | awk \'$1=="IP4.ADDRESS[1]:"{{sub(/\\/[0-9]+$/,"",$2); print $2;}}\''.format(name)
 				r = subprocess.run(cmd,shell=True,stdout=subprocess.PIPE,encoding='utf-8')
 				addr = r.stdout.strip('\n')
 			connections[name] = connection_t(name,device,status,addr,kind)

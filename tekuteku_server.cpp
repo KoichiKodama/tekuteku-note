@@ -70,8 +70,8 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-04-28";
-static std::string m_server_name = "tekuteku-server";
+static std::string m_version = "build 2026-04-29";
+static std::string m_server_name = "tekuteku-note";
 static std::string m_magic;
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_package_folder = ".";
@@ -738,6 +738,7 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 	else {
 		beast::http::response<beast::http::file_body> res{beast::http::status::ok,req.version()};
 		res.set(beast::http::field::server,m_server_name);
+//		res.set("Permissions-Policy","on-device-speech-recognition=(self)");
 		res.keep_alive(req.keep_alive());
 		std::string file_path = "." + t.path();
 		res.body().open(file_path.c_str(),beast::file_mode::scan,ec);
