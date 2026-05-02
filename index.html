@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="referrer" content="none">
-<title>てくてくノート ver 2026-04-29</title>
+<title>てくてくノート ver 2026-05-03</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -198,7 +198,8 @@ var translate_text = function(c){ return c.text; }
 
 var socket;
 var keep_alive = false;
-var host = ""; // tekuteku_server の URL
+var host = ""; // tekuteku_server のアドレスか DNS 名
+var hostname_mdns = ""; // tekuteku_server の mDNS 名 ( host がアドレスの場合 iPad の接続に必要 )
 var id;	// 自分自身の識別子
 var whiteboard = [];
 var my_text_index = -1;	// -1 : 通常入力, >=0 : 編集した whiteboard の行番号
@@ -788,7 +789,8 @@ async function host_select(hosts) {
 		else { host = hosts[0]; }
 		message += 'このアドレスを他の人に通知して下さい。';
 	}
-	$('#host').text(host+message).removeClass(k_warning).addClass(k_success);
+	let h = ( hostname_mdns == "" ? `${host} ` : `${hostname_mdns} ( ${host} ) `);
+	$('#host').text(h+message).removeClass(k_warning).addClass(k_success);
 }
 
 function update_table_takers() {
@@ -837,6 +839,7 @@ async function receive(event) {
 	case 0 :
 		id = response.id;
 		host_select(response.server);
+		if ( response.server_mdns !== undefined ) hostname_mdns = response.server_mdns;
 		if ( 'package_folder' in response ) {
 			package_folder = response['package_folder'];
 			if ( package_folder.length != 0 ) {

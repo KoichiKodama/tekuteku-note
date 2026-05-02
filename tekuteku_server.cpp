@@ -12,7 +12,9 @@
 	#include <winrt/Windows.Storage.h>
 	#include <winrt/Windows.Foundation.h>
 	#include <winrt/Windows.Foundation.Collections.h>
+	#include <winrt/Windows.Networking.h>
 	#include <winrt/Windows.Networking.Connectivity.h>
+	#include <winrt/Windows.Networking.ServiceDiscovery.Dnssd.h>
 	#include <winrt/Windows.UI.Popups.h>
 #else
 	#include <unistd.h>
@@ -46,14 +48,15 @@
 	#include <boost/beast/websocket/ssl.hpp>
 #endif
 #include <boost/format.hpp>
+#include <boost/nowide/convert.hpp>
 #ifndef MSIX
 	#include <boost/process/v2/popen.hpp>
 	#include <boost/process/v2/environment.hpp>
 	#include <boost/process/v2/start_dir.hpp>
 #endif
 
-#include <json.hpp>
-#include <tray.hpp>
+#include "json.hpp"
+#include "tray.hpp"
 
 #ifdef _WINDOWS
 	#pragma comment(lib,"RuntimeObject.lib")
@@ -70,11 +73,12 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-04-29";
-static std::string m_server_name = "tekuteku-note";
-static std::string m_magic;
+static std::string m_version = "build 2026-05-03";
+static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_package_folder = ".";
+static std::string m_server_name = "tekuteku-note";
+static std::string m_magic;
 static std::mutex m_mutex_log;
 static int debug_async_accept = 0;
 static int debug_async_read = 0;
@@ -178,18 +182,27 @@ struct network_t {
 	address_ipv4_t broadcast; // = (net.address.c|~(net.mask.c))
 };
 
-bool enum_network( std::vector<network_t>& result ) {
+bool enum_network( std::vector<network_t>& result, std::string& hostname_local ) {
 	result.clear();
 	#ifdef _WINDOWS
 	address_ipv4_t loopback(127,0,0,1);
 	auto l = winrt::Windows::Networking::Connectivity::NetworkInformation::GetHostNames();
 	for (const winrt::Windows::Networking::HostName& c : l) {
-		if ( c.IPInformation() && c.Type() == winrt::Windows::Networking::HostNameType::Ipv4 ) {
-			network_t net;
-			net.address.c = address_ipv4_t(winrt::to_string(c.CanonicalName())).c;
-			net.mask.c = (0xffffffff)>>(32-static_cast<uint8_t>(c.IPInformation().PrefixLength().Value()));
-			net.broadcast.c = (net.address.c|~(net.mask.c));
-			if ( net.address != loopback ) result.push_back(net);
+		switch (c.Type()) {
+		case winrt::Windows::Networking::HostNameType::DomainName: {
+			std::string s = winrt::to_string(c.CanonicalName());
+			if ( s.find(".local") != std::string::npos ) hostname_local = s;
+			}
+			break;
+		case winrt::Windows::Networking::HostNameType::Ipv4: 
+			if ( c.IPInformation() ) {
+				network_t net;
+				net.address.c = address_ipv4_t(winrt::to_string(c.CanonicalName())).c;
+				net.mask.c = (0xffffffff)>>(32-static_cast<uint8_t>(c.IPInformation().PrefixLength().Value()));
+				net.broadcast.c = (net.address.c|~(net.mask.c));
+				if ( net.address != loopback ) result.push_back(net);
+			}
+			break;
 		}
 	}
 	#else
@@ -210,6 +223,7 @@ bool enum_network( std::vector<network_t>& result ) {
 		}
 		freeifaddrs(ifa);
 	}
+	hostname_local = "";
 	#endif
 	return true;
 }
@@ -422,6 +436,8 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 			const std::string a = (*ii).address.to_string();
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
+		if (!m_hostname_local.empty()) r["server_mdns"] = m_hostname_local+( m_port == DEFAULT_PORT ? "" : ( boost::format(":%d") % m_port ).str() );
+
 		if ( m_package_folder != "." && is_localhost(info.id) ) r["package_folder"] = m_package_folder;
 		#ifdef USE_SSL
 		if ( m_cfg.contains("yyprobe") ) r["yyprobe"] = m_cfg["yyprobe"];
@@ -842,7 +858,7 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 		timer.async_wait(yield[ec]);
 
 		std::vector<network_t> l;
-		if ( enum_network(l) == false ) throw std::runtime_error("enum_network");
+		if ( enum_network(l,m_hostname_local) == false ) throw std::runtime_error("enum_network");
 		if ( std::equal(l.begin(),l.end(),m_servers.begin(),m_servers.end(),[]( const network_t& a, const network_t& b ){ return a.address == b.address; }) == false ) {
 			m_servers.swap(l);
 			log("network changed");
@@ -853,6 +869,52 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 		}
 	}
 }
+
+/*class mdns_publisher_t {
+public:
+	mdns_publisher_t( const std::string& service_name, int port ) : m_instance(nullptr) {
+		IP4_ADDRESS addr = (DWORD)0;
+		m_instance = DnsServiceConstructInstance(L"tekuteku-note._http._tcp.local.",L"tekuteku-note",&addr,nullptr,static_cast<uint16_t>(port),0,0,0,nullptr,nullptr);
+		if (m_instance != nullptr) {
+			ZeroMemory(&m_request,sizeof(m_request));
+			m_request.Version = DNS_QUERY_REQUEST_VERSION1;
+			m_request.pServiceInstance = m_instance;
+			m_request.pRegisterCompletionCallback = mdns_publisher_t::on_registration_complete;
+			m_request.pQueryContext = this;
+			start();
+		}
+		else log("mdns_publisher_t error");
+	}
+
+	~mdns_publisher_t() {
+		stop();
+		if (m_instance) DnsServiceFreeInstance(m_instance);
+	}
+
+	bool start() {
+		DWORD rc = DnsServiceRegister(&m_request,nullptr);
+		if ( rc != DNS_REQUEST_PENDING ) {
+			log(boost::format("mdns registration failed (%d)") % rc);
+			return false;
+		}
+		log(boost::format("mdns registration started for %s") % boost::nowide::narrow(std::wstring(m_instance->pszHostName)));
+		return true;
+	}
+
+	void stop() {
+		if (m_instance) {
+			DnsServiceDeRegister(&m_request,nullptr);
+			log("mdns service deregistered");
+		}
+	}
+
+private:
+	static void WINAPI on_registration_complete( DWORD status, PVOID pQueryContext, PDNS_SERVICE_INSTANCE pInstance ) {
+		log(boost::format("mdns callback %s (%d)") % (status==ERROR_SUCCESS?"ok":"error") % status);
+	}
+	DNS_SERVICE_INSTANCE* m_instance;
+	DNS_SERVICE_REGISTER_REQUEST m_request;
+};*/
 
 int main( int argc, char** argv ) {
 	try {
@@ -919,7 +981,7 @@ int main( int argc, char** argv ) {
 
 		m_whiteboard.reserve(4096);
 		log(boost::format("started %s on port=%d") % m_version % m_port);
-		if ( enum_network(m_servers) == false ) throw std::runtime_error("enum_network");
+		if ( enum_network(m_servers,m_hostname_local) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) log("no network");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log(boost::format("server : %s/%s") % net.address.to_string() % net.mask.to_string()); });
 
