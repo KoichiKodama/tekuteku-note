@@ -768,6 +768,7 @@ function socket_open(url) {
 
 async function host_select(hosts) {
 	let message = 'に接続しました。';
+	let host_s = `${host} `;
 	if ( is_localhost() == true ) {
 		if ( hosts === undefined || hosts.length == 0 ) { $('#host').text("ネットワークにつながっていません").removeClass(k_success).addClass(k_warning); return; }
 		if ( hosts.length >= 2 ) {
@@ -788,9 +789,9 @@ async function host_select(hosts) {
 		}
 		else { host = hosts[0]; }
 		message += 'このアドレスを他の人に通知して下さい。';
+		host_s = ( hostname_mdns == "" ? `${host} ` : `${hostname_mdns} ( ${host} ) `);
 	}
-	let h = ( hostname_mdns == "" ? `${host} ` : `${hostname_mdns} ( ${host} ) `);
-	$('#host').text(h+message).removeClass(k_warning).addClass(k_success);
+	$('#host').text(host_s+message).removeClass(k_warning).addClass(k_success);
 }
 
 function update_table_takers() {
@@ -838,8 +839,8 @@ async function receive(event) {
 	switch ( response.type ) {
 	case 0 :
 		id = response.id;
-		host_select(response.server);
 		if ( response.server_mdns !== undefined ) hostname_mdns = response.server_mdns;
+		host_select(response.server);
 		if ( 'package_folder' in response ) {
 			package_folder = response['package_folder'];
 			if ( package_folder.length != 0 ) {

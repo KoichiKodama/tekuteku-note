@@ -73,7 +73,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-05-03";
+static std::string m_version = "build 2026-05-04";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_package_folder = ".";
@@ -984,6 +984,7 @@ int main( int argc, char** argv ) {
 		if ( enum_network(m_servers,m_hostname_local) == false ) throw std::runtime_error("enum_network");
 		if ( m_servers.empty() ) log("no network");
 		std::for_each(m_servers.begin(),m_servers.end(),[](const network_t& net){ log(boost::format("server : %s/%s") % net.address.to_string() % net.mask.to_string()); });
+		log(boost::format("server_mdns : %s") % m_hostname_local);
 
 		thread_x = std::move(std::thread([]{
 			try {
