@@ -2,7 +2,7 @@
 <html lang="ja" data-bs-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>ラズパイコントロール 2026-03-25</title>
+<title>ラズパイコントロール 2026-05-11</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
 </head>
@@ -123,12 +123,14 @@ function update_table(data) {
 }
 
 let html_shutdown = `
-<div class="container" style="width:400px;">
+<div class="container">
+	<div class="row"><div class="col-auto mx-auto">
 	<div class="alert alert-warning">
 		<div class="text-center fs-3">シャットダウン開始しました。</div>
 		<div class="text-center">緑LEDが完全に消灯したらシャットダウン完了です。</div>
 		<div class="text-center">このウインドウは閉じて下さい。</div>
 	</div>
+	</div></div>
 </div>`;
 
 $(document).ready( function(){
