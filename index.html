@@ -2,8 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<meta name="referrer" content="none">
-<title>てくてくノート ver 2026-05-03</title>
+<title>てくてくノート ver 2026-05-11</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -20,7 +19,10 @@
 	</div>
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
-	<div class="input-group m-2 taker-extra"><textarea id="pre-roll" class="form-control fs-taker" style="overflow:auto;height:10vh;resize:vertical;" placeholder="'F1'でカーソル行を送信。ダブルクリックで入力欄にコピー。'ESC'で全消去。"></textarea></div>
+	<div class="input-group m-2 taker-extra extra-div">
+		<textarea id="pre-roll" class="form-control fs-taker" style="height:10vh;overflow:auto;resize:vertical;" placeholder="'F1'でカーソル行を送信。ダブルクリックで入力欄にコピー。'ESC'で全消去。"></textarea>
+		<div id="special" class="form-control m-0 p-0 border-0"></div>
+	</div>
 </div>
 <div class="col col-2 taker-extra">
 	<div class="input-group m-2"><span class="input-group-text">F1</span><input type="text" id="key-1" class="form-control" value=""/></div>
@@ -95,6 +97,14 @@
 			<li class="dropdown-item" data-fs="fs-3">中</li>
 			<li class="dropdown-item" data-fs="fs-4">小</li>
 			<li class="dropdown-item" data-fs="fs-5">最小</li>
+			</ul>
+		</div>
+		<div class="dropdown" id="extra">
+			<button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">その他</button>
+			<ul class="dropdown-menu">
+			<li class="dropdown-item" data-extra="none">なし</li>
+			<li class="dropdown-item" data-extra="pre-roll">プリロール</li>
+			<li class="dropdown-item" data-extra="special">特殊文字</li>
 			</ul>
 		</div>
 		<div class="dropdown" id="translate-lang">
@@ -232,146 +242,6 @@ function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').re
 
 var token = {};	// トークン一覧
 
-async function recognizer_whisper() {
-	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	let socket = null;
-	let mic_stream;
-	const mic = new mic_monitor_t('#recognition-control');
-	const url = token["whisper"].url.replace('{tekuteku-server}',location.hostname);
-
-	function change_state(i) {
-		state = i;
-		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
-	}
-
-	async function start_() {
-		if ( state != 0 ) return;
-		socket_send(2);
-		change_state(1);
-		socket = new WebSocket(url);
-		socket.onopen = async function(event){
-			mic_stream = new mic_stream_t(socket);
-			await mic_stream.start();
-			await mic.start();
-			change_state(2);
-		};
-		socket.onclose = function(event){ change_state(0); };
-		socket.onerror = async function(event){ await stop_(); change_state(9); };
-		socket.onmessage = function(event) {
-			const data = JSON.parse(event.data);
-			if ( data.type === "config" ) {
-				if ( data.useAudioWorklet !== true ) alert("whisper -> --pcm-input not specified");
-				return;
-			}
-			if ( data.type === "ready_to_stop" ) {
-				console.log("whisper -> ready_to_stop received");
-				socket.close();
-				return;
-			}
-			if ( data.lines === undefined ) return;
-			recognized_text_list = data.lines.filter((c)=>c.speaker>0||c.text.length>0).map((c,j)=>new recognized_text(`${c.speaker}:${c.text}`,true,j));
-			socket_send(0);
-//			if (final) {
-//				recognized_text_list = [];
-//				socket_send(2);
-//			}
-		};
-	};
-
-	async function stop_() {
-		if ( state != 2 ) return;
-		change_state(1);
-		await mic.stop();
-		await mic_stream.stop(); 
-		socket.close();
-	};
-
-	function status_() { change_state(state); return state; };
-
-	var recognizer_ = {
-		start : start_,
-		stop : stop_,
-		status : status_,
-		set_lang : ()=>alert('set_lang is not supported'),
-		set_dic : ()=>alert('set_dic is not supported'),
-		on_change_state : undefined
-	};
-	change_state(0);
-	return recognizer_;
-}
-
-async function recognizer_vosk() {
-	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	let socket = null;
-	let mic_stream;
-	const mic = new mic_monitor_t('#recognition-control');
-	const model = token["vosk"].model;
-	const url = token["vosk"].url.replace('{tekuteku-server}',location.hostname);
-
-	function change_state(i) {
-		state = i;
-		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
-	}
-
-	async function start_() {
-		if ( state != 0 ) return;
-		socket_send(2);
-		change_state(1);
-		socket = new WebSocket(url);
-		socket.onopen = async function(event){
-			socket.send(`{"model":"${model}"}`);
-			mic_stream = new mic_stream_t(socket);
-			await mic_stream.start();
-			await mic.start();
-			change_state(2);
-		};
-		socket.onclose = function(event){ change_state(0); };
-		socket.onerror = async function(event){ await stop_(); change_state(9); };
-		socket.onmessage = function(event) {
-			const response = JSON.parse(event.data);
-			const final = response.final;
-			const text = response.text;
-			let a = my_split(text,35,40,"ja-JP");
-			let j=0;
-			a.forEach((x)=>{
-				if ( j < recognized_text_list.length ) {
-					let y = recognized_text_list[j];
-					if ( x != y.text || final != y.final ) y.set(x,final,j);
-				}
-				else recognized_text_list.push(new recognized_text(x,final,j));
-				j++;
-			});
-			if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
-			socket_send(0);
-			if (final) {
-				recognized_text_list = [];
-				socket_send(2);
-			}
-		};
-	};
-
-	async function stop_() {
-		if ( state != 2 ) return;
-		change_state(1);
-		await mic.stop();
-		await mic_stream.stop(); 
-		socket.close();
-	};
-
-	function status_() { change_state(state); return state; };
-
-	var recognizer_ = {
-		start : start_,
-		stop : stop_,
-		status : status_,
-		set_lang : ()=>{ alert('set_lang is not supported'); },
-		set_dic : ()=>{ alert('set_dic is not supported'); },
-		on_change_state : undefined
-	};
-	change_state(0);
-	return recognizer_;
-}
-
 async function recognizer_yyprobe() {
 	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	let socket = null;
@@ -425,8 +295,8 @@ async function recognizer_yyprobe() {
 	async function stop_() {
 		if ( state != 2 ) return;
 		change_state(1);
-		mic.stop();
-		mic_stream.stop();
+		await mic.stop();
+		await mic_stream.stop();
 		socket.close();
 	};
 
@@ -676,8 +546,8 @@ async function set_recognition_engine(engine) {
 		}
 		case "amivoice": { recognizer = await recognizer_amivoice(); $('#recognition-dic').show(); break; }
 		case "yyprobe": { recognizer = await recognizer_yyprobe(); break; }
-		case "vosk": { recognizer = await recognizer_vosk(); break; }
-		case "whisper": { recognizer = await recognizer_whisper(); break; }
+//		case "vosk": { recognizer = await recognizer_vosk(); break; }
+//		case "whisper": { recognizer = await recognizer_whisper(); break; }
 	}
 	recognizer.on_change_state = recognition_control_update;
 	recognizer.status();
@@ -813,8 +683,8 @@ async function parse_token() {
 	if ( lang_processlocally.includes('ja-JP') ) $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="default-local">ローカル標準</li>');
 	if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); }
 	if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); }
-	if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); }
-	if ( 'whisper' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="whisper">WHISPER</li>'); }
+//	if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); }
+//	if ( 'whisper' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="whisper">WHISPER</li>'); }
 	$('#recognition-engine').show();
 	if ( 'google-translate' in token ) {
 		translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
@@ -861,8 +731,8 @@ async function receive(event) {
 			}
 		}
 		if ( 'yyprobe' in response ) token['yyprobe'] = response['yyprobe'];
-		if ( 'vosk' in response ) token['vosk'] = response['vosk'];
-		if ( 'whisper' in response ) token['whisper'] = response['whisper'];
+//		if ( 'vosk' in response ) token['vosk'] = response['vosk'];
+//		if ( 'whisper' in response ) token['whisper'] = response['whisper'];
 		if ( 'amivoice' in response ) token['amivoice'] = response['amivoice'];
 		if ( 'google-translate' in response ) token['google-translate'] = response['google-translate'];
 		await parse_token();
@@ -932,6 +802,28 @@ function set_font_size( font_size ) {
 function set_theme(theme) {
 	document.documentElement.setAttribute('data-bs-theme',theme);
 	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
+}
+
+function init_special() {
+	const keys_greek = [
+		'&#x3b1;','&#x3b2;','&#x3b3;','&#x3b4;','&#x3b5;','&#x3b7;','&#x3b8;','&#x3bb;','&#x3bc;',
+		'&#x3bd;','&#x3c0;','&#x3c1;','&#x3c3;','&#x3c4;','&#x3c5;','&#x3c6;','&#x3c7;','&#x3c8;','&#x3c9;'];
+	const keys_math = ['&#xb1;','&#xd7;','&#xf7;','&#x2266;','&#x2267;','&#x2282;','&#x2283;','&#x221d;'];
+	let html = '';
+	html += '<div class="btn-group ms-0 me-2 my-1">'; keys_greek.forEach((code)=>{ html += `<button class="btn btn-outline-secondary">${code}</button>`; }); html += '</div>';
+	html += '<div class="btn-group ms-0 me-2 my-1">'; keys_math.forEach((code)=>{ html += `<button class="btn btn-outline-secondary">${code}</button>`; }); html += '</div>'
+	$('div#special').empty().append(html);
+	$('div#special button').on('click',function(){ append_input($(this).text()); })
+}
+
+function set_extra(item) {
+	$('#special, #pre-roll, .extra-div').hide();
+	$('#extra li').removeClass('text-bg-primary').filter(`[data-extra="${item}"]`).addClass('text-bg-primary');
+	switch (item) {
+	case 'none': break;
+	case 'pre-roll': $('#pre-roll').show(); break;
+	case 'special': $('#special').show(); break;
+	}
 }
 
 function set_screen_mode(mode) {
@@ -1019,9 +911,12 @@ function shortcut_to_cookie() {
 	document.cookie = 'font-size='+encodeURI($('#font-size li').filter('.text-bg-primary').data('fs'));
 }
 
+//
 // ここから実行
+//
 const is_mobile = /Android|iPhone/i.test(window.navigator.userAgent)
 set_font_size('fs-4');
+init_special(); set_extra('pre-roll');
 set_theme('dark');
 set_screen_mode(0);
 shortcut_from_cookie();
@@ -1048,6 +943,7 @@ $('#screen-mode').on('hide.bs.dropdown',({clickEvent})=>{
 	}
 });
 $('#font-size').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_font_size($(clickEvent.target).data('fs')); } });
+$('#extra').on('hide.bs.dropdown',({clickEvent})=>{ if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) { set_extra($(clickEvent.target).data('extra')); } });
 $('#translate-lang').on('hide.bs.dropdown',({clickEvent})=>{
 	if ( clickEvent?.target && $(clickEvent.target).hasClass('dropdown-item') ) {
 		$('#translate-lang li.text-bg-primary').removeClass('text-bg-primary');
