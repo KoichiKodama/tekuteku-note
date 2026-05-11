@@ -73,7 +73,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-05-04";
+static std::string m_version = "build 2026-05-11";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_package_folder = ".";
@@ -303,12 +303,13 @@ public:
 	void stop() { m_stop = true; set(); };
 	bool wait( asio::yield_context yield ) {
 		asio::steady_timer m_timer{yield.get_executor()};
-		for (;;) {
-			if ( m_count != 0 ) { m_count = 0; break; }
+		for (int t=0;t<10000;t+=m_interval) {
+			if ( m_count != 0 ) break;
 			m_timer.expires_after(asio::chrono::milliseconds(m_interval));
 			boost::system::error_code ec;
 			m_timer.async_wait(yield[ec]);
 		}
+		m_count = 0;
 		return ( m_stop == true ? false : true );
 	};
 	bool is_stopped() const { return m_stop; };
@@ -355,24 +356,22 @@ void broadcast_status( asio::yield_context yield ) {
 		}
 		else j_whiteboard.clear();
 
-		std::map<std::shared_ptr<websocket_stream_t>,taker_info_t> x_takers;
 		nlohmann::json j_takers;
 		for (auto& e:m_takers) {
 			std::shared_ptr<websocket_stream_t> p_ws = e.first;
-			const taker_info_t t = e.second;
+			const taker_info_t& t = e.second;
 			if ((p_ws)&&(p_ws->is_open())) {
 				nlohmann::json x;
 				if (!t.is_readonly) x["text"] = t.text;
 				x["id"] = t.id;
 				x["num"] = t.num;
 				j_takers.emplace_back(x);
-				x_takers.insert(e);
 			}
 		}
 
-		for (auto& e:x_takers) {
+		for (auto& e:m_takers) {
 			std::shared_ptr<websocket_stream_t> p_ws = e.first;
-			taker_info_t t = e.second;
+			taker_info_t& t = e.second;
 			if ((p_ws)&&(p_ws->is_open())) {
 				nlohmann::json x;
 				x["type"] = 1;
@@ -707,7 +706,7 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 		// magic 確認は websocket に限定
 		if ( m_magic.empty() == false && t.param("magic") != m_magic ) return reply(bad_request("authentication failure"));
 		auto p_ws = std::make_shared<websocket_stream_t>(std::move(stream));
-		beast::websocket::stream_base::timeout opt {std::chrono::seconds(5),std::chrono::seconds(30),true};
+		beast::websocket::stream_base::timeout opt{std::chrono::seconds(5),std::chrono::seconds(30),true};
 		p_ws->set_option(opt);
 		p_ws->async_accept(req,yield); debug_async_accept++;
 		asio::spawn(beast::get_lowest_layer(*p_ws).socket().get_executor(),std::bind(exec_websocket_session,p_ws,std::placeholders::_1));
