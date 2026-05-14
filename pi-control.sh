@@ -7,8 +7,8 @@ import time
 import re
 import logging
 
-version = '2026-04-30'
-wifi_dev = 'wlan0'
+version = '2026-05-14'
+wifi_dev = ''
 
 logging.basicConfig(filename='pi-control.log',level=logging.INFO,format='%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s')
 logger = logging.getLogger(__name__)
@@ -61,7 +61,9 @@ def job_status(force_rescan):
 				addr = r.stdout.strip('\n')
 			connections[name] = connection_t(name,device,status,addr,kind)
 
+	# AP 以外の wifi device を探す。
 	# type == wifi and  device != ap0 and connection != ap0 を wifi_dev とする。
+	wifi_dev = '';
 	r = subprocess.run(shlex.split('nmcli -g TYPE,DEVICE,CONNECTION dev'),stdout=subprocess.PIPE,encoding='utf-8')
 	if r.returncode == 0:
 		l = r.stdout.splitlines()
@@ -71,20 +73,22 @@ def job_status(force_rescan):
 				wifi_dev = ss[1]
 				break
 
-	# signal >= 56 のみを利用可とする <- nmcli dev wifi list での色分け
-	wifi = []
-	o = "-rescan yes" if force_rescan == 1 else ""
-	r = subprocess.run(shlex.split('nmcli -g SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
-	if r.returncode == 0:
-		l = r.stdout.splitlines()
-		for s in l[1:len(l)]:
-			ss = s.split(':')
-			ssid = ss[0]
-			signal = int(ss[1])
-			if signal >= 56: wifi.append(ssid)
+	# AP 以外の wifi device が存在したら、利用可能な接続先を探す。
+	if len(wifi_dev) != 0:
+		# signal >= 56 のみを利用可とする <- nmcli dev wifi list での色分け
+		wifi = []
+		o = "-rescan yes" if force_rescan == 1 else ""
+		r = subprocess.run(shlex.split('nmcli -g SSID,SIGNAL dev wifi list ifname {0} {1}'.format(wifi_dev,o)),stdout=subprocess.PIPE,encoding='utf-8')
+		if r.returncode == 0:
+			l = r.stdout.splitlines()
+			for s in l[1:len(l)]:
+				ss = s.split(':')
+				ssid = ss[0]
+				signal = int(ss[1])
+				if signal >= 56: wifi.append(ssid)
 
-	for c in connections.values():
-		if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
+		for c in connections.values():
+			if c.kind == "wifi" and c.status == 9 and c.name in wifi: c.status = 0
 
 #	return { "status":1, "connections":list(connections.values()) }
 	return { "status":1, "connections":[val for key,val in sorted(connections.items())] }
