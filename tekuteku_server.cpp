@@ -869,52 +869,6 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 	}
 }
 
-/*class mdns_publisher_t {
-public:
-	mdns_publisher_t( const std::string& service_name, int port ) : m_instance(nullptr) {
-		IP4_ADDRESS addr = (DWORD)0;
-		m_instance = DnsServiceConstructInstance(L"tekuteku-note._http._tcp.local.",L"tekuteku-note",&addr,nullptr,static_cast<uint16_t>(port),0,0,0,nullptr,nullptr);
-		if (m_instance != nullptr) {
-			ZeroMemory(&m_request,sizeof(m_request));
-			m_request.Version = DNS_QUERY_REQUEST_VERSION1;
-			m_request.pServiceInstance = m_instance;
-			m_request.pRegisterCompletionCallback = mdns_publisher_t::on_registration_complete;
-			m_request.pQueryContext = this;
-			start();
-		}
-		else log("mdns_publisher_t error");
-	}
-
-	~mdns_publisher_t() {
-		stop();
-		if (m_instance) DnsServiceFreeInstance(m_instance);
-	}
-
-	bool start() {
-		DWORD rc = DnsServiceRegister(&m_request,nullptr);
-		if ( rc != DNS_REQUEST_PENDING ) {
-			log(boost::format("mdns registration failed (%d)") % rc);
-			return false;
-		}
-		log(boost::format("mdns registration started for %s") % boost::nowide::narrow(std::wstring(m_instance->pszHostName)));
-		return true;
-	}
-
-	void stop() {
-		if (m_instance) {
-			DnsServiceDeRegister(&m_request,nullptr);
-			log("mdns service deregistered");
-		}
-	}
-
-private:
-	static void WINAPI on_registration_complete( DWORD status, PVOID pQueryContext, PDNS_SERVICE_INSTANCE pInstance ) {
-		log(boost::format("mdns callback %s (%d)") % (status==ERROR_SUCCESS?"ok":"error") % status);
-	}
-	DNS_SERVICE_INSTANCE* m_instance;
-	DNS_SERVICE_REGISTER_REQUEST m_request;
-};*/
-
 int main( int argc, char** argv ) {
 	try {
 		#ifdef _WINDOWS
