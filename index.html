@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-05-11</title>
+<title>てくてくノート ver 2026-05-17</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -20,7 +20,7 @@
 	<table class="table table-sm table-bordered align-middle m-2 bg-secondary text-white fs-taker" id="table-takers"><tbody></tbody></table>
 	<div class="input-group m-2 taker"><textarea id="my-text" class="form-control fs-taker" rows="1" style="resize:none;" placeholder="ここでテキスト入力。'ENTER'で送信。'SHIFT+ENTER'で改行。'ESC'で全消去。"></textarea></div>
 	<div class="input-group m-2 taker-extra extra-div">
-		<textarea id="pre-roll" class="form-control fs-taker" style="height:10vh;overflow:auto;resize:vertical;" placeholder="'F1'でカーソル行を送信。ダブルクリックで入力欄にコピー。'ESC'で全消去。"></textarea>
+		<textarea id="pre-roll" class="form-control fs-taker" style="height:10vh;overflow:auto;resize:vertical;" placeholder="'F1'でカーソル行を送信。ダブルクリックで入力欄にコピー。"></textarea>
 		<div id="special" class="form-control m-0 p-0 border-0"></div>
 	</div>
 </div>
@@ -178,7 +178,7 @@
 		Microsoft Store からインストールした場合、ログは下のパス（フォルダ）に保存されています。
 		ブラウザからは直接開けないので、パスをコピーし、エクスプローラなどを使って開いて下さい。
 		</p>
-		<div class="modal-text text-break" id="msix-package-folder"></div>
+		<div class="modal-text text-break" id="msix-local-folder"></div>
 	</div>
 	<div class="modal-footer">
 		<button type="button" class="btn btn-secondary" id="msix-copy"></button>
@@ -196,7 +196,7 @@
 <script type="text/javascript">
 'use strict';
 
-var package_folder = ""; // msix でインストールした際の LocalState の場所
+var local_folder = ""; // msix でインストールした際の LocalState の場所
 var tekuteku_url = "";
 var taker_name = "";
 var screen_mode = 0; // 0:標準, 1:見るだけ, 2:字幕表示
@@ -711,12 +711,12 @@ async function receive(event) {
 		id = response.id;
 		if ( response.server_mdns !== undefined ) hostname_mdns = response.server_mdns;
 		host_select(response.server);
-		if ( 'package_folder' in response ) {
-			package_folder = response['package_folder'];
-			if ( package_folder.length != 0 ) {
+		if ( 'local_folder' in response ) {
+			local_folder = response['local_folder'];
+			if ( local_folder.length != 0 ) {
 				$('#etc').html('<button class="btn btn-outline-secondary" id="msix">アプリ設定</button>');
 				$('#msix').on('click',async ()=>{
-					$('#msix-package-folder').text(package_folder);
+					$('#msix-local-folder').text(local_folder);
 					$('#msix-copy').text('パスをコピー')
 					let x = new bootstrap.Modal('#msix-modal',{});
 					let d = new Promise((resolve)=>{
@@ -727,7 +727,7 @@ async function receive(event) {
 					});
 					await d;
 				});
-				$('#msix-copy').on('click',()=>{ navigator.clipboard.writeText($('#msix-package-folder').text()).then(()=>{ $('#msix-copy').text('コピー済'); }); });
+				$('#msix-copy').on('click',()=>{ navigator.clipboard.writeText($('#msix-local-folder').text()).then(()=>{ $('#msix-copy').text('コピー済'); }); });
 			}
 		}
 		if ( 'yyprobe' in response ) token['yyprobe'] = response['yyprobe'];
@@ -1036,10 +1036,10 @@ $(document).on('keydown',function(event){
 			event.preventDefault();
 			$('#my-text').val(get_current_line()); socket_send(1); $('#my-text').val('');
 			break;
-		case 'Escape' :
-			event.preventDefault();
-			$('#pre-roll').val('');
-			break;
+//		case 'Escape' :
+//			event.preventDefault();
+//			$('#pre-roll').val('');
+//			break;
 		}
 	}
 	else if ( event.target == $('#my-text')[0] ) {
