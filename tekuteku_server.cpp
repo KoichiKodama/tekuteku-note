@@ -73,7 +73,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-05-17";
+static std::string m_version = "build 2026-05-20";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_local_folder = ".";
@@ -436,7 +436,6 @@ void exec_websocket_session( std::shared_ptr<websocket_stream_t> p_ws, asio::yie
 			r["server"].push_back(( m_port == DEFAULT_PORT ? a : ( boost::format("%s:%d") % a % m_port ).str() ));
 		}
 		if (!m_hostname_local.empty()) r["server_mdns"] = m_hostname_local+( m_port == DEFAULT_PORT ? "" : ( boost::format(":%d") % m_port ).str() );
-
 		if ( m_local_folder != "." && is_localhost(info.id) ) r["local_folder"] = m_local_folder;
 		#ifdef USE_SSL
 		if ( m_cfg.contains("yyprobe") ) r["yyprobe"] = m_cfg["yyprobe"];
@@ -895,16 +894,14 @@ int main( int argc, char** argv ) {
 			argc--; argv++;
 		}
 		{
-			std::ifstream f(fname_config);
-			if (f.is_open()) m_cfg = nlohmann::json::parse(f);
+		std::ifstream f(fname_config);
+		if (f.is_open()) m_cfg = nlohmann::json::parse(f);
 		}
-
 		if ( m_cfg.contains("port") ) {
 			m_port = m_cfg["port"].get<int>();
 			m_logfile = (boost::format("%s/tekuteku-note-%04d.log") % m_local_folder % m_port).str();
 		}
 		else m_logfile = (boost::format("%s/tekuteku-note.log") % m_local_folder).str();
-
 		if ( m_cfg.contains("magic") ) m_magic = m_cfg["magic"].get<std::string>();
 		if ( m_cfg.contains("broadcast_interval") ) request_broadcast.set_interval(m_cfg["broadcast_interval"].get<int>());
 		truncate_log();

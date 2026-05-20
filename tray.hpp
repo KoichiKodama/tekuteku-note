@@ -58,7 +58,7 @@ static HMENU mk_exit_menu( UINT id ) {
 	item.fType = 0;
 	item.fState = 0;
 	item.wID = id;
-	item.dwTypeData = "exit";
+	item.dwTypeData = (LPSTR)"exit";
 	item.dwItemData = 0;
 	InsertMenuItem(hmenu,id,TRUE,&item);
 	return hmenu;
