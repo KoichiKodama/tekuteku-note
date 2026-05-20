@@ -73,7 +73,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-05-20";
+static std::string m_version = "build 2026-05-21";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_local_folder = ".";
@@ -969,15 +969,13 @@ int main( int argc, char** argv ) {
 		#endif
 		#endif
 
-		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico") == 0 ) { while ( tray_loop(1) == 0 ) {} }
-
+		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico",terminate_server) == 0 ) { while ( tray_loop(1) == 0 ) {} }
 		#ifdef _WINDOWS
 		#ifndef MSIX
 		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
 		for (auto& proc:m_exec) { proc.terminate(); }
 		#endif
 		#endif
-		terminate_server();
 		return 0;
 	}
 	catch ( boost::system::system_error& e ) { log(boost::format("boost exception : %s") % e.what()); }

@@ -1,5 +1,7 @@
-﻿static int tray_exist( const char* tray_name );
-static int tray_init( const char* tray_name, const char* icon_file_name );
+﻿using terminate_job_t = void(*)();
+static terminate_job_t m_job;
+static int tray_exist( const char* tray_name );
+static int tray_init( const char* tray_name, const char* icon_file_name, terminate_job_t job );
 static int tray_loop( int blocking );
 
 #if defined(_WIN64)||defined(_WIN32)
@@ -20,11 +22,13 @@ static HMENU hmenu = NULL;
 
 static LRESULT CALLBACK tray_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
-	case WM_CLOSE:
-		DestroyWindow(hwnd);
-		return 0;
-	case WM_DESTROY:
-		PostQuitMessage(0);
+	case WM_CLOSE: DestroyWindow(hwnd); return 0;
+	case WM_DESTROY: PostQuitMessage(0); return 0;
+	case WM_ENDSESSION:
+		if ( wparam == TRUE ) {
+			m_job();
+			DestroyWindow(hwnd);
+		}
 		return 0;
 	case WM_TRAY_CALLBACK_MESSAGE:
 		if ( lparam == WM_LBUTTONUP || lparam == WM_RBUTTONUP ) {
@@ -41,9 +45,6 @@ static LRESULT CALLBACK tray_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
 			SendMessage(hwnd,WM_CLOSE,0,0);
 			return 0;
 		}
-		break;
-	case WM_ENDSESSION:
-		if ( wparam == TRUE ) return 0;
 		break;
 	}
 	return DefWindowProc(hwnd,msg,wparam,lparam);
@@ -66,7 +67,9 @@ static HMENU mk_exit_menu( UINT id ) {
 
 static int tray_exist( const char* tray_name ) { return ( FindWindow(WC_TRAY_CLASS_NAME,tray_name) == NULL ? 0 : 1 ); }
 
-static int tray_init( const char* tray_name, const char* icon_file_name ) {
+static int tray_init( const char* tray_name, const char* icon_file_name, terminate_job_t job ) {
+	m_job = job;
+
 	memset(&wc,0,sizeof(wc));
 	wc.cbSize = sizeof(WNDCLASSEX);
 	wc.lpfnWndProc = tray_wnd_proc;
@@ -103,6 +106,7 @@ static int tray_loop( int blocking ) {
 		if ( nid.hIcon != 0 ) DestroyIcon(nid.hIcon);
 		if ( hmenu != 0 ) DestroyMenu(hmenu);
 		UnregisterClass(WC_TRAY_CLASS_NAME,GetModuleHandle(NULL));
+		m_job();
 		return -1;
 	}
 	TranslateMessage(&msg);
@@ -116,7 +120,8 @@ static int tray_loop( int blocking ) {
 
 static sigset_t ss;
 static int tray_exist( const char* tray_name ) { return 0; }
-static int tray_init( const char* tray_name, const char* icon_file_name ) {
+static int tray_init( const char* tray_name, const char* icon_file_name, terminate_job_t job ) {
+	m_job = job;
 	sigemptyset(&ss);
 	sigaddset(&ss,SIGTERM);
 	return ( pthread_sigmask(SIG_BLOCK,&ss,nullptr) == 0 ? 0 : -1 );
@@ -126,7 +131,7 @@ static int tray_loop( int blocking ) {
 	struct timespec ts;
 	ts.tv_sec = 0;
 	ts.tv_nsec = ( blocking == 0 ? 0 : 500000000 );
-	return ( sigtimedwait(&ss,&si,&ts) > 0 ? -1 : 0 );
+	if ( sigtimedwait(&ss,&si,&ts) > 0 ) { m_job(); return -1; } else { return 0; }
 }
 
 #endif
