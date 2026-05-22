@@ -917,7 +917,7 @@ int main( int argc, char** argv ) {
 
 		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
-		std::string tray_name = (boost::format("tekuteku-%04d") % m_port).str().c_str();
+		std::string tray_name = (boost::format("tekuteku-note-%04d") % m_port).str().c_str();
 		if ( tray_exist(tray_name.c_str()) == 1 ) {
 			log("stop due to multiple servers");
 			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
@@ -969,7 +969,7 @@ int main( int argc, char** argv ) {
 		#endif
 		#endif
 
-		if ( tray_init((boost::format("tekuteku-%04d") % m_port).str().c_str(),"tekuteku.ico",terminate_server) == 0 ) { while ( tray_loop(1) == 0 ) {} }
+		if ( tray_init((boost::format("tekuteku-note-%04d") % m_port).str().c_str(),"tekuteku.ico",terminate_server) == 0 ) { while ( tray_loop(1) == 0 ) {} }
 		#ifdef _WINDOWS
 		#ifndef MSIX
 		if ( m_cfg.contains("exec") ) { for (auto& a : m_cfg["exec"]) SendMessage(FindWindow("TRAY",a.get<std::string>().c_str()),WM_CLOSE,0,0); }
