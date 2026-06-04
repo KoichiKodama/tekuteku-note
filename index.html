@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-05-17</title>
+<title>てくてくノート ver 2026-06-04</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -190,7 +190,6 @@
 
 <script src='./tools/jquery-3.6.0/jquery-3.6.0.min.js'></script>
 <script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
-<script src='./tools/sprintf-1.1.2/sprintf.min.js'></script>
 <script type="text/javascript" src="./tools/amivoice.js"></script>
 <script type="text/javascript" src="./tools/mic.js"></script>
 <script type="text/javascript">
@@ -326,14 +325,11 @@ async function recognizer_amivoice() {
 	};
 	var mic = new mic_monitor_t('#recognition-control');
 
-	Wrp.sid = token["amivoice"].username;
-	Wrp.spw = token["amivoice"].password;
-
+	Wrp.authorization = token["amivoice"].key;
 	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/nolog/";	// ログを残さない場合は /nolog を付加
-	Wrp.issuerURL = "https://acp-api.amivoice.com/issue_service_authorization";
 	Wrp.profileWords = "";
 	Wrp.epi = '60000'; // ワンタイム APPKEY の有効期間（ミリ秒）
-	Wrp.grammarFileNames = '-a2-ja-general'; // 日本語 -a2-ja-general / 多言語 -a2-multi-general / 日本語汎用 -a-general
+	Wrp.grammarFileNames = token["amivoice"].engine; // 日本語 -a2-ja-general / 多言語 -a2-multi-general / 日本語汎用 -a-general
 
 	function update_result(result,is_final) {
 		let text = html_encode(amivoice_parse(result).text);
@@ -370,14 +366,17 @@ async function recognizer_amivoice() {
 	Wrp.feedDataPauseEnded = function(reason){};
 	Wrp.utteranceStarted = function(time){};
 	Wrp.utteranceEnded = function(time){};
-	Wrp.issueStarted = function(){ change_state(1); };
-	Wrp.issueEnded = function(){ Wrp.feedDataResume(); };
 	Wrp.resultCreated = function(){ recognized_text_list = []; socket_send(2); };
 	Wrp.resultUpdated = function(result){ update_result(result,false); };
 	Wrp.resultFinalized = function(result){ update_result(result,true); };
 	Wrp.eventNotified = function(event_id,event_message){};
 
-	async function start_(){ if ( state == 0 ) { Wrp.issue(); socket_send(2); } await mic.start(); };
+	async function start_(){ if ( state == 0 ) {
+		change_state(1);
+		Wrp.feedDataResume();
+		socket_send(2); }
+		await mic.start();
+	};
 	async function stop_(){ if ( state == 2 ) { Wrp.feedDataPause(); } await mic.stop(); };
 	function status_(){ change_state(state); return state; };
 	function set_dic_(dictionary){ Wrp.profileWords = dictionary.join('|'); };
@@ -485,7 +484,7 @@ async function recognizer_default( is_local = false ) {
 		switch (state) {
 			case 2: sprec.start(); break;
 			case 9: break;
-			default: { change_state(0); break; }
+			default: change_state(0); break;
 		}
 	}
 	sprec.onerror = async function(event){
@@ -665,8 +664,8 @@ async function host_select(hosts) {
 }
 
 function update_table_takers() {
-	let f = function(i,s){ return sprintf('<tr><td class="text-center" style="width:3ch;">%d</td><td class="teku">%s</td></tr>',i,s); };
-	if (is_mobile) f = function(i,s){ return sprintf('<tr><td class="teku">%s</td></tr>',s); };
+	let f = function(i,s){ return `<tr><td class="text-center" style="width:3ch;">${i}</td><td class="teku">${s}</td></tr>`; };
+	if (is_mobile) f = function(i,s){ return `<tr><td class="teku">${s}</td></tr>`; };
 	let num_ro = 0;
 	$('#table-takers > tbody').empty();
 	m_takers.forEach((c)=>{
@@ -675,7 +674,7 @@ function update_table_takers() {
 		let s = ( c.text.length == 0 ? '　' : c.text.replace(/\n/g,'<br>') ); // 空文字で行がつぶれない様に全角スペースを入れる
 		$('#table-takers > tbody').append(f(c.num,s));
 	});
-	if ( screen_mode == 0 && !is_mobile && num_ro != 0 ) $('#table-takers > tbody').append(sprintf('<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>%d人</td></tr>',num_ro));
+	if ( screen_mode == 0 && !is_mobile && num_ro != 0 ) $('#table-takers > tbody').append(`<tr><td class="text-center" style="width:3ch;"><img src="./emoji-smile.svg" width="16" height="16"/></td><td>${num_ro}人</td></tr>`);
 }
 
 async function parse_token() {
@@ -751,7 +750,7 @@ async function receive(event) {
 				x.attr('name',o.i).html(s);
 				if ( o.edit == 1 ) { x.addClass('text-warning'); } else { x.removeClass('text-warning'); }
 			}
-			else { $('#whiteboard-table').append(sprintf('<tr><td name="%d" %s>%s</td></tr>',o.i,( o.edit == 1 ? 'class="text-warning"' : '' ),s)); }
+			else { $('#whiteboard-table').append(`<tr><td name="${o.i}" ${( o.edit == 1 ? 'class="text-warning"' : '' )}>${s}</td></tr>`); }
 		});
 		if ( auto_scroll_whiteboard == true ) $('#whiteboard-div')[0].scroll({top:$('#whiteboard-div')[0].scrollHeight,behavior:'instant'});
 		m_takers = response.takers.sort((x,y)=>{ return (( 'text' in x ? x.num : -1 )-( 'text' in y ? y.num : -1 )); }).concat();
@@ -794,14 +793,14 @@ function set_font_size( font_size ) {
 	if ( /^fs-[1-5]$/.test(font_size) == false ) { return; }
 	$('.fs-taker').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(( font_size != 'fs-5' ? 'fs-4' : 'fs-5' ));
 	$('#whiteboard-table').removeClass('fs-1 fs-2 fs-3 fs-4 fs-5').addClass(font_size);
-	$('#font-size li').removeClass('text-bg-primary').filter(sprintf('[data-fs="%s"]',font_size)).addClass('text-bg-primary');
+	$('#font-size li').removeClass('text-bg-primary').filter(`[data-fs="${font_size}"]`).addClass('text-bg-primary');
 	set_screen_mode();
 	$('#my-text').on('keyup change',function(){ $(this).css('background-image',( $(this).val().length == 0 ? '' : mk_guide() )); });
 }
 
 function set_theme(theme) {
 	document.documentElement.setAttribute('data-bs-theme',theme);
-	$('#screen-theme li').removeClass('text-bg-primary').filter(sprintf('[data-theme="%s"]',theme)).addClass('text-bg-primary');
+	$('#screen-theme li').removeClass('text-bg-primary').filter(`[data-theme="${theme}"]`).addClass('text-bg-primary');
 }
 
 function init_special() {
@@ -831,7 +830,7 @@ function set_screen_mode(mode) {
 
 	if ( mode != null ) {
 		screen_mode = mode;
-		$('#screen-mode li').removeClass('text-bg-primary').filter(sprintf('[data-mode="%d"]',screen_mode)).addClass('text-bg-primary');
+		$('#screen-mode li').removeClass('text-bg-primary').filter(`[data-mode="${screen_mode}"]`).addClass('text-bg-primary');
 	}
 	$('div.container-fluid div.row:first-child').css('transform','');
 	const o = $('div.container-fluid > div.row:first-child > div.col:first-child');
@@ -1178,7 +1177,7 @@ if (use_voice_recognition()) {
 				await d;
 			});
 		}
-		else $('#setup-processlocally').hide();
+		else $('#setup-processlocally').parent().hide();
 	});
 }
 

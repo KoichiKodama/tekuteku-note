@@ -192,14 +192,10 @@ var Wrp = function() {
 		sid: null,
 		spw: null,
 		epi: null,
-//		connect: connect_,
-//		disconnect: disconnect_,
 		feedDataResume: feedDataResume_,
-//		feedData: feedData_,
 		feedDataPause: feedDataPause_,
 		isConnected: isConnected_,
 		isActive: isActive_,
-		issue: issue_,
 		connectStarted: undefined,
 		connectEnded: undefined,
 		disconnectStarted: undefined,
@@ -464,50 +460,5 @@ var Wrp = function() {
 	function isConnected_() { return (state_ === 2 || state_ === 3 || state_ === 4 || state_ === 5 || state_ === 6 || state_ === 7 || state_ === 23 || state_ === 27 || state_ === 34 || state_ === 36); }
 	function isActive_() { return (state_ === 5); }
 
-	// サービス認証キー文字列の発行
-	function issue_() {
-		if (!wrp_.sid) { console.log("サービス ID が設定されていません。"); return false; }
-		for (var i=0;i<wrp_.sid.length;i++) {
-			var c = wrp_.sid.charCodeAt(i);
-			if (!(c >= 0x30 && c <= 0x39 || c >= 0x61 && c <= 0x7A || c >= 0x41 && c <= 0x5A || c === 0x2D || c === 0x5F)) return false;
-		}
-		if (!wrp_.spw) { console.log("サービスパスワードが設定されていません。"); return false; }
-		for (var i=0;i<wrp_.spw.length;i++) {
-			var c = wrp_.spw.charCodeAt(i);
-			if ( c < 0x20 || c > 0x7E ) return false;
-		}
-		for (var i=0;i<wrp_.epi.length;i++) {
-			var c = wrp_.epi.charCodeAt(i);
-			if ( c < 0x30 || c > 0x39 ) return false;
-		}
-		wrp_.issueStarted?.();
-		var searchParams = "sid=" + encodeURIComponent(wrp_.sid) + "&spw=" + encodeURIComponent(wrp_.spw);
-		if (wrp_.epi) { searchParams += "&epi=" + encodeURIComponent(wrp_.epi); }
-		var httpRequest = new XMLHttpRequest();
-		httpRequest.addEventListener("load", function(e) {
-			if (e.target.status === 200) {
-				wrp_.authorization = e.target.response;
-				wrp_.issueEnded?.(e.target.response);
-			}
-			else { wrp_.issueEnded?.(""); }
-		});
-		httpRequest.addEventListener("error", function(e) { wrp_.issueEnded?.(""); });
-		httpRequest.addEventListener("abort", function(e) { wrp_.issueEnded?.(""); });
-		httpRequest.addEventListener("timeout", function(e) { wrp_.issueEnded?.(""); });
-		httpRequest.open("POST",wrp_.issuerURL,true);
-		httpRequest.setRequestHeader("Content-Type","application/x-www-form-urlencoded");
-		httpRequest.send(searchParams);
-		return true;
-	}
-
-	wrp_.serverURL = window.location.protocol + "//" + window.location.host + window.location.pathname;
-	wrp_.serverURL = wrp_.serverURL.substring(0, wrp_.serverURL.lastIndexOf('/') + 1);
-	if (wrp_.serverURL.endsWith("/tool/")) { wrp_.serverURL = wrp_.serverURL.substring(0, wrp_.serverURL.length - 5); }
-	wrp_.serverURL += "/";
-	wrp_.grammarFileNames = "-a-general";
-	wrp_.issuerURL = window.location.protocol + "//" + window.location.host + window.location.pathname;
-	wrp_.issuerURL = wrp_.issuerURL.substring(0, wrp_.issuerURL.lastIndexOf('/'));
-	if ( wrp_.issuerURL.indexOf("/tool",wrp_.issuerURL.length - 5) !== -1 ) { wrp_.issuerURL = wrp_.issuerURL.substring(0, wrp_.issuerURL.length - 5); }
-	wrp_.issuerURL += "/issue_service_authorization";
 	return wrp_;
 }();
