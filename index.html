@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-06-05</title>
+<title>てくてくノート ver 2026-06-07</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -218,7 +218,7 @@ var timer_reset; // 強制消去用タイマー
 var timer_ping; // ソケット保持用タイマー
 
 var recognizer = null;
-var recognition_local = false;
+// var recognition_local = false;
 var recognized_text_list = [];
 var lang_processlocally = [];
 
@@ -240,78 +240,6 @@ function html_encode(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot/g,'"').replace(/&apos;/g,"'").replace(/<br>/g,"\n"); }
 
 var token = {};	// トークン一覧
-
-async function recognizer_yyprobe() {
-	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	let socket = null;
-	let mic_stream;
-	const mic = new mic_monitor_t('#recognition-control');
-	const key = token["yyprobe"].key;
-	const url = token["yyprobe"].url.replace('{tekuteku-server}',location.hostname);
-
-	function change_state(i) {
-		state = i;
-		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
-	}
-
-	async function start_() {
-		if ( state != 0 ) return;
-		socket_send(2);
-		change_state(1);
-		socket = new WebSocket(url);
-		socket.onopen = async function(event){
-			socket.send(`{"key":"${key}"}`);
-			mic_stream = new mic_stream_t(socket);
-			await mic_stream.start();
-			await mic.start();
-			change_state(2);
-		};
-		socket.onclose = function(event){ change_state(0); };
-		socket.onerror = function(event){ stop_(); change_state(9); };
-		socket.onmessage = function(event) {
-			const response = JSON.parse(event.data);
-			const final = response.final;
-			const text = response.text;
-			let a = my_split(text,35,40,"ja-JP");
-			let j=0;
-			a.forEach((x)=>{
-				if ( j < recognized_text_list.length ) {
-					let y = recognized_text_list[j];
-					if ( x != y.text || final != y.final ) y.set(x,final,j);
-				}
-				else recognized_text_list.push(new recognized_text(x,final,j));
-				j++;
-			});
-			if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
-			socket_send(0);
-			if (final) {
-				recognized_text_list = [];
-				socket_send(2);
-			}
-		};
-	};
-
-	async function stop_() {
-		if ( state != 2 ) return;
-		change_state(1);
-		await mic.stop();
-		await mic_stream.stop();
-		socket.close();
-	};
-
-	function status_() { change_state(state); return state; };
-
-	var recognizer_ = {
-		start : start_,
-		stop : stop_,
-		status : status_,
-		set_lang : ()=>{ alert('set_lang is not supported'); },
-		set_dic : ()=>{ alert('set_dic is not supported'); },
-		on_change_state : undefined
-	};
-	change_state(0);
-	return recognizer_;
-}
 
 async function recognizer_amivoice() {
 	var state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
@@ -343,13 +271,14 @@ async function recognizer_amivoice() {
 			j++;
 		});
 		recognized_text_list.splice(j);
-		if ( recognition_local == true ) {
-			let s = "";
-			recognized_text_list.forEach((c)=>{ s += ( c.text + "\n" ); });
-			$('#pre-roll').val(s);
-			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
-		}
-		else { socket_send(0); }
+//		if ( recognition_local == true ) {
+//			let s = "";
+//			recognized_text_list.forEach((c)=>{ s += ( c.text + "\n" ); });
+//			$('#pre-roll').val(s);
+//			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
+//		}
+//		else { socket_send(0); }
+		socket_send(0);
 	};
 	function change_state(i) {
 		state = i;
@@ -392,6 +321,7 @@ async function check_processlocally() {
 	let lang_downloadable = [];
 	for (const lang of ['ja-JP','en-US']) {
 		let rc = await SpeechRecognition.available({langs:[lang],processLocally:true,});
+		if ( rc != 'unavailable' ) console.log(`SpeechRecognition.available(${lang})=${rc}`);
 		if ( rc == 'available' ) lang_available.push(lang);
 		if ( rc == 'downloadable' ) lang_downloadable.push(lang);
 	}
@@ -446,28 +376,12 @@ async function recognizer_default( is_local = false ) {
 		}
 		if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
 
-//		let j=0;
-//		for (let i=0;i<event.results.length;i++) {
-//			let result = event.results[i];
-//			if ( result[0].transcript.length == 0 ) continue;
-//			let a = my_split(result[0].transcript,35,40,sprec.lang);
-//			a.forEach((x)=>{
-//				if ( j < recognized_text_list.length ) {
-//					let y = recognized_text_list[j];
-//					if ( x != y.text || result.isFinal != y.final ) y.set(x,result.isFinal,j);
-//				}
-//				else recognized_text_list.push(new recognized_text(x,result.isFinal,j));
-//				j++;
-//			});
+//		if ( recognition_local == true ) {
+//			let s = "";
+//			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
+//			$('#pre-roll').val(s);
+//			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
 //		}
-//		if ( j < recognized_text_list.length ) recognized_text_list.splice(j);
-
-		if ( recognition_local == true ) {
-			let s = "";
-			recognized_text_list.forEach((c)=>{ s += ( c.text + ( c.final == true ? "\n" : " ...\n" ) ); });
-			$('#pre-roll').val(s);
-			if ( auto_scroll_pre_roll == true ) $('#pre-roll')[0].scroll({top:$('#pre-roll')[0].scrollHeight,behavior:'instant'});
-		}
 		socket_send(0);
 	}
 	sprec.onspeechstart = function(event){ // このタイミングで新規認識を判断する
@@ -544,9 +458,6 @@ async function set_recognition_engine(engine) {
 			break;
 		}
 		case "amivoice": { recognizer = await recognizer_amivoice(); $('#recognition-dic').show(); break; }
-		case "yyprobe": { recognizer = await recognizer_yyprobe(); break; }
-//		case "vosk": { recognizer = await recognizer_vosk(); break; }
-//		case "whisper": { recognizer = await recognizer_whisper(); break; }
 	}
 	recognizer.on_change_state = recognition_control_update;
 	recognizer.status();
@@ -588,21 +499,21 @@ function socket_send( status ) {
 			response.text = ( my_text_index == -1 ? taker_name : "" )+$('#my-text').val();
 			response.text_index = my_text_index;
 			response.voice_text = [];
-			if ( recognition_local == false ) {
-				for (let i=0;i<recognized_text_list.length;i++) {
-					let c = recognized_text_list[i];
-					if ( c.tobe_sent == true ) {
-						response.voice_text.push({text:(taker_name+c.text),id:c.id,final:c.final});
-//						response.voice_text.push({text:c.text,id:c.id,final:c.final});
-						c.tobe_sent = false;
-					}
+//			if ( recognition_local == false ) {
+			for (let i=0;i<recognized_text_list.length;i++) {
+				let c = recognized_text_list[i];
+				if ( c.tobe_sent == true ) {
+					response.voice_text.push({text:(taker_name+c.text),id:c.id,final:c.final});
+//					response.voice_text.push({text:c.text,id:c.id,final:c.final});
+					c.tobe_sent = false;
 				}
-				// voice_fixed : 最初の未確定の直前の id
-				// voice_last : 最後尾の id ( 音声認識結果の配列が縮小した際に使う )
-				const i = recognized_text_list.findIndex((c)=>!c.final);
-				if ( i>0 ) response.voice_fixed = recognized_text_list[i-1].id;
-				if ( recognized_text_list.length != 0 ) response.voice_last = recognized_text_list.at(-1).id;
 			}
+			// voice_fixed : 最初の未確定の直前の id
+			// voice_last : 最後尾の id ( 音声認識結果の配列が縮小した際に使う )
+			const i = recognized_text_list.findIndex((c)=>!c.final);
+			if ( i>0 ) response.voice_fixed = recognized_text_list[i-1].id;
+			if ( recognized_text_list.length != 0 ) response.voice_last = recognized_text_list.at(-1).id;
+//			}
 		}
 		socket.send(JSON.stringify(response));
 //		socket.send(new Blob([JSON.stringify(response)],{type:"application/json",}));
@@ -680,10 +591,7 @@ function update_table_takers() {
 async function parse_token() {
 	$('#recognition-engine > ul.dropdown-menu').empty().append('<li class="dropdown-item text-bg-primary" data-engine="default">ブラウザ標準</li>');
 	if ( lang_processlocally.includes('ja-JP') ) $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="default-local">ローカル標準</li>');
-	if ( 'yyprobe' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="yyprobe">YYProbe</li>'); }
 	if ( 'amivoice' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="amivoice">AmiVoice</li>'); }
-//	if ( 'vosk' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="vosk">VOSK</li>'); }
-//	if ( 'whisper' in token ) { $('#recognition-engine > ul.dropdown-menu').append('<li class="dropdown-item" data-engine="whisper">WHISPER</li>'); }
 	$('#recognition-engine').show();
 	if ( 'google-translate' in token ) {
 		translate_text = function(c) { // c : whiteboard の要素 ( i,text,edit )
@@ -729,9 +637,6 @@ async function receive(event) {
 				$('#msix-copy').on('click',()=>{ navigator.clipboard.writeText($('#msix-local-folder').text()).then(()=>{ $('#msix-copy').text('コピー済'); }); });
 			}
 		}
-		if ( 'yyprobe' in response ) token['yyprobe'] = response['yyprobe'];
-//		if ( 'vosk' in response ) token['vosk'] = response['vosk'];
-//		if ( 'whisper' in response ) token['whisper'] = response['whisper'];
 		if ( 'amivoice' in response ) token['amivoice'] = response['amivoice'];
 		if ( 'google-translate' in response ) token['google-translate'] = response['google-translate'];
 		await parse_token();
