@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>config.json 作成</title>
+<link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
+<meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
+</head>
+<body>
+<div class="container" style="max-width:800px;">
+	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">パスワード</span><input type="text" id="key" class="form-control" value="" maxlength="32"/></div>
+	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">AmiVoice</span><input type="text" id="amivoice" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">Google 翻訳</span><input type="text" id="google-translate" class="form-control" value=""/></div>
+	<div class="input-group m-2 justify-content-end"><button class="btn btn-secondary" id="save">保存</button></div>
+</div>
+<script src='./tools/jquery-3.6.0.min.js'></script>
+<script src='./tools/bootstrap-5.3.0/js/bootstrap.bundle.min.js'></script>
+<script src='./tools/crypto.js'></script>
+<script type="text/javascript">
+'use strict';
+$('#save').click(async function(){
+	const key = $('#key').val().padStart(32,' ');
+	const amivoice = $('#amivoice').val();
+	const google_translate = $('#google-translate').val();
+
+	let token = {};
+	if ( amivoice != "" ) { token['amivoice'] = {key:`${await encrypt(amivoice,key)}`}; }
+	if ( google_translate != "" ) { token['google-translate'] = {key:`${await encrypt(google_translate,key)}`}; }
+	const b = new Blob([JSON.stringify(token,null,2)],{type:'application/json'});
+
+	if ( typeof window.showSaveFilePicker === 'function' ) {
+		const f = await window.showSaveFilePicker({suggestedName:'config.json',types:[{accept:{'application/json':['.json']}}]}); // ファイル保存ダイアログを表示して FileSystemFileHandle オブジェクトを取得
+		const s = await f.createWritable();
+		await s.write(b);
+		await s.close();
+	}
+	else {
+		// Safari は window.showSaveFilePicker をサポートしていない
+		const url = URL.createObjectURL(b);
+		const e = document.createElement("a");
+		document.body.appendChild(e);
+		e.download = 'config.json';
+		e.href = url;
+		e.click();
+		e.remove();
+		URL.revokeObjectURL(url);
+	}
+});
+</script>
+</body>
+</html>

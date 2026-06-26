@@ -15,7 +15,6 @@
 	#include <winrt/Windows.Networking.h>
 	#include <winrt/Windows.Networking.Connectivity.h>
 	#include <winrt/Windows.Networking.ServiceDiscovery.Dnssd.h>
-	#include <winrt/Windows.UI.Popups.h>
 #else
 	#include <unistd.h>
 	#include <sys/types.h>
@@ -73,7 +72,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-05-21";
+static std::string m_version = "build 2026-06-25";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_local_folder = ".";
@@ -868,6 +867,15 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 	}
 }
 
+void launch_browser() {
+	std::string m_host_url = (boost::format("http://localhost:%d") % m_port).str();
+	#ifdef MSIX
+	winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(winrt::to_hstring(m_host_url))).get();
+	#else
+	if (!( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",m_host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 )) throw std::runtime_error("spawn_client");
+	#endif
+}
+
 int main( int argc, char** argv ) {
 	try {
 		#ifdef _WINDOWS
@@ -919,8 +927,8 @@ int main( int argc, char** argv ) {
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
 		std::string tray_name = (boost::format("tekuteku-note-%04d") % m_port).str().c_str();
 		if ( tray_exist(tray_name.c_str()) == 1 ) {
-			log("stop due to multiple servers");
-			MessageBoxW(NULL,L"同じポートでは、複数のサーバを動かせません。",L"てくてくノートサーバ",MB_OK);
+			log("avoid starting multiple servers");
+			launch_browser();
 			return 0;
 		}
 		#ifndef MSIX
@@ -960,15 +968,9 @@ int main( int argc, char** argv ) {
 
 		#ifdef _WINDOWS
 		#ifndef USE_SSL
-		std::string m_host_url = (boost::format("http://localhost:%d") % m_port).str();
-		#ifdef MSIX
-		winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(winrt::to_hstring(m_host_url)));
-		#else
-		if (!( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",m_host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 )) throw std::runtime_error("spawn_client");
+		launch_browser();
 		#endif
 		#endif
-		#endif
-
 		if ( tray_init((boost::format("tekuteku-note-%04d") % m_port).str().c_str(),"tekuteku.ico",terminate_server) == 0 ) { while ( tray_loop(1) == 0 ) {} }
 		#ifdef _WINDOWS
 		#ifndef MSIX
@@ -976,6 +978,7 @@ int main( int argc, char** argv ) {
 		for (auto& proc:m_exec) { proc.terminate(); }
 		#endif
 		#endif
+
 		return 0;
 	}
 	catch ( boost::system::system_error& e ) { log(boost::format("boost exception : %s") % e.what()); }
