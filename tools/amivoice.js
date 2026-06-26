@@ -1,6 +1,6 @@
 // sample-rate = 16000 固定で down-sampling は行わない
 
-var Recorder = function() {
+function amivoice_recorder() {
 	window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
 	navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
 	navigator.mediaDevices = navigator.mediaDevices || ((navigator.getUserMedia) ? {
@@ -14,7 +14,7 @@ var Recorder = function() {
 	} : null);
 
 	// public オブジェクト
-	var recorder_ = {
+	let recorder_ = {
 		sampleRate: 16000,
 		resume: resume_,
 		pause: pause_,
@@ -26,15 +26,15 @@ var Recorder = function() {
 		pauseEnded: undefined 
 	};
 
-	var state_ = -1;
-	var audioContext_;
-	var audioProcessor_;
-	var audioProcessor_onaudioprocess_recorded_;
-	var audioStream_;
-	var audioProvider_;
-	var audioSamplesPerSec_;
-	var pcmData_;
-	var reason_;
+	let state_ = -1;
+	let audioContext_;
+	let audioProcessor_;
+	let audioProcessor_onaudioprocess_recorded_;
+	let audioStream_;
+	let audioProvider_;
+	let audioSamplesPerSec_;
+	let pcmData_;
+	let reason_;
 
 	function trim(val,valmin,valmax) {
 		if ( val < valmin ) return valmin;
@@ -54,7 +54,7 @@ var Recorder = function() {
 			"  process(inputs, outputs, parameters) {",
 			"    if (inputs.length > 0 && inputs[0].length > 0) {",
 			"      if (inputs[0].length === 2) {",
-			"        for (var j = 0; j < inputs[0][0].length; j++) {",
+			"        for (let j = 0; j < inputs[0][0].length; j++) {",
 			"          inputs[0][0][j] = (inputs[0][0][j] + inputs[0][1][j]) / 2",
 			"        }",
 			"      }",
@@ -68,11 +68,11 @@ var Recorder = function() {
 		audioProcessor_.bufferSize = 128;
 		audioProcessor_onaudioprocess_recorded_ = function(event) {
 			if ( state_ === 0 ) return; // for AudioWorklet
-			var audioData = event.data;
-			var pcmDataOffset = 1;
-			var pcmDataIndex = pcmDataOffset;
-			for (var audioDataIndex = 0; audioDataIndex < audioData.length; audioDataIndex++) {
-				var pcm = trim(audioData[audioDataIndex]*32768|0,-32768,32767); // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
+			let audioData = event.data;
+			let pcmDataOffset = 1;
+			let pcmDataIndex = pcmDataOffset;
+			for (let audioDataIndex = 0; audioDataIndex < audioData.length; audioDataIndex++) {
+				let pcm = trim(audioData[audioDataIndex]*32768|0,-32768,32767); // 小数 (0.0～1.0) を 整数 (-32768～32767) に変換...
 				pcmData_[pcmDataIndex++] = (pcm >> 8) & 0xFF;
 				pcmData_[pcmDataIndex++] = (pcm     ) & 0xFF;
 			}
@@ -128,8 +128,8 @@ var Recorder = function() {
 		.then(
 			function(audioStream) {
 				audioStream.stopTracks = function() {
-					var tracks = audioStream.getTracks();
-					for (var i=0;i<tracks.length;i++) { tracks[i].stop(); }
+					let tracks = audioStream.getTracks();
+					for (let i=0;i<tracks.length;i++) { tracks[i].stop(); }
 					state_ = 0;
 					recorder_.pauseEnded?.(reason_);
 				};
@@ -166,17 +166,17 @@ var Recorder = function() {
 	function isActive_() { return (state_ === 2); }
 
 	return recorder_;
-}();
+}
 
 function amivoice_parse(result) {
-	var json = JSON.parse(result);
+	let json = JSON.parse(result);
 	json.duration = (json.results && json.results[0]) ? json.results[0].endtime : 0;
 	json.confidence = (json.results && json.results[0]) ? json.results[0].confidence : -1.0;
 	return json;
 }
 
-var Wrp = function() {
-	var wrp_ = {
+function create_amivoice() {
+	let wrp_ = {
 		serverURL: "",
 		grammarFileNames: "",
 		profileId: "",
@@ -236,11 +236,11 @@ var Wrp = function() {
 	// 		-> disconnect_ state=8 
 	// 		-> on_close state=0
 
-	var state_ = 0;
-	var socket_;
-	var reason_;
-	var interlock_ = false;
-	var recorder_ = window.Recorder;
+	let state_ = 0;
+	let socket_;
+	let reason_;
+	let interlock_ = false;
+	let recorder_ = amivoice_recorder();
 
 	if (!recorder_) console.log("error no Recorder");
 
@@ -280,7 +280,7 @@ var Wrp = function() {
 			socket_.send(data);
 		}
 		else {
-			var newData = new Uint8Array(1+data.length);
+			let newData = new Uint8Array(1+data.length);
 			newData[0] = 0x70; // 'p'
 			newData.set(data,1);
 			socket_.send(newData);
@@ -318,7 +318,7 @@ var Wrp = function() {
 		};
 
 		socket_.onmessage = function(event) {
-			var tag = event.data[0];
+			let tag = event.data[0];
 			// S : 発話区間開始検出通知
 			// E : 発話区間終了検出通知
 			// C : 認識処理開始通知
@@ -327,7 +327,7 @@ var Wrp = function() {
 			// R : 認識処理結果通知
 			// Q : 
 			// G : サーバ内でのアクション結果通知
-			var body = event.data.substring(2);
+			let body = event.data.substring(2);
 			switch (tag) {
 			case 's': // 音声データ送信開始コマンド応答
 				if (body) {
@@ -424,7 +424,7 @@ var Wrp = function() {
 		return true;
 	}
 	function feedDataResume__() {
-		var command = "s ";
+		let command = "s ";
 		if (wrp_.codec) { command += wrp_.codec; } else { command += "MSB16K"; }
 		if (wrp_.grammarFileNames) {
 			command += " " + wrp_.grammarFileNames;
@@ -452,7 +452,7 @@ var Wrp = function() {
 		return true;
 	}
 	function feedDataPause__() {
-		var command = "e";
+		let command = "e";
 		socket_.send(command);
 		return true;
 	}
@@ -461,4 +461,4 @@ var Wrp = function() {
 	function isActive_() { return (state_ === 5); }
 
 	return wrp_;
-}();
+}

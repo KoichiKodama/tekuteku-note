@@ -250,6 +250,7 @@ function html_encode(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function html_decode(s) { return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot/g,'"').replace(/&apos;/g,"'").replace(/<br>/g,"\n"); }
 
 async function recognizer_amivoice() {
+	let wrp = create_amivoice();
 	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
 	let recognizer_ = {
 		start : start_,
@@ -261,14 +262,14 @@ async function recognizer_amivoice() {
 	};
 	let mic = new mic_monitor_t('#recognition-control');
 
-	Wrp.authorization = token("amivoice").key;
-	Wrp.serverURL = "wss://acp-api.amivoice.com/v1/nolog/";	// ログを残さない場合は /nolog を付加
-	Wrp.profileWords = "";
-	Wrp.epi = '60000'; // ワンタイム APPKEY の有効期間（ミリ秒）
-	Wrp.grammarFileNames = '-a2-ja-general'; // 日本語 -a2-ja-general / 多言語 -a2-multi-general / 日本語汎用 -a-general
+	wrp.authorization = token("amivoice").key;
+	wrp.serverURL = "wss://acp-api.amivoice.com/v1/nolog/";	// ログを残さない場合は /nolog を付加
+	wrp.profileWords = "";
+	wrp.epi = '60000'; // ワンタイム APPKEY の有効期間（ミリ秒）
+	wrp.grammarFileNames = '-a2-ja-general'; // 日本語 -a2-ja-general / 多言語 -a2-multi-general / 日本語汎用 -a-general
 
 	function update_result(result,is_final) {
-		let text = html_encode(amivoice_parse(result).text);
+		let text = amivoice_parse(result).text;
 		if (!is_final) text = text.replace(/\.+$/,''); // AmiVoice が付加する末尾の ... を削除する
 		let a = my_split(text,35,40,'ja-JP');
 		let j=0;
@@ -286,31 +287,31 @@ async function recognizer_amivoice() {
 		if (recognizer_.on_change_state) { recognizer_.on_change_state(state); };
 	};
 
-	Wrp.connectStarted = function(){ change_state(1); };
-	Wrp.connectEnded = function(){};
-	Wrp.disconnectStarted = function(){ change_state(1); };
-	Wrp.disconnectEnded = function(){ change_state(0); };
-	Wrp.feedDataResumeStarted = function(){};
-	Wrp.feedDataResumeEnded = function(){ change_state(2); };
-	Wrp.feedDataPauseStarted = function(){};
-	Wrp.feedDataPauseEnded = function(reason){};
-	Wrp.utteranceStarted = function(time){};
-	Wrp.utteranceEnded = function(time){};
-	Wrp.resultCreated = function(){ recognized_text_list = []; socket_send(2); };
-	Wrp.resultUpdated = function(result){ update_result(result,false); };
-	Wrp.resultFinalized = function(result){ update_result(result,true); };
-	Wrp.eventNotified = function(event_id,event_message){};
+	wrp.connectStarted = function(){ change_state(1); };
+	wrp.connectEnded = function(){};
+	wrp.disconnectStarted = function(){ change_state(1); };
+	wrp.disconnectEnded = function(){ change_state(0); };
+	wrp.feedDataResumeStarted = function(){};
+	wrp.feedDataResumeEnded = function(){ change_state(2); };
+	wrp.feedDataPauseStarted = function(){};
+	wrp.feedDataPauseEnded = function(reason){};
+	wrp.utteranceStarted = function(time){};
+	wrp.utteranceEnded = function(time){};
+	wrp.resultCreated = function(){ recognized_text_list = []; socket_send(2); };
+	wrp.resultUpdated = function(result){ update_result(result,false); };
+	wrp.resultFinalized = function(result){ update_result(result,true); };
+	wrp.eventNotified = function(event_id,event_message){};
 
 	async function start_(){
-		if ( state == 0 ) { change_state(1); Wrp.feedDataResume(); socket_send(2); }
+		if ( state == 0 ) { change_state(1); wrp.feedDataResume(); socket_send(2); }
 		await mic.start();
 	};
 	async function stop_(){
-		if ( state == 2 ) { Wrp.feedDataPause(); }
+		if ( state == 2 ) { wrp.feedDataPause(); }
 		await mic.stop();
 	};
 	function status_(){ change_state(state); return state; };
-	function set_lang_(lang){ Wrp.grammarFileNames = lang; };
+	function set_lang_(lang){ wrp.grammarFileNames = lang; };
 	change_state(0);
 	return recognizer_;
 }
