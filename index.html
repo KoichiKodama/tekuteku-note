@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-06-26</title>
+<title>てくてくノート ver 2026-06-27</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -204,6 +204,7 @@
 <script type="text/javascript" src="./tools/mic.js"></script>
 <script type="text/javascript">
 'use strict';
+var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 
 let local_folder = ""; // msix でインストールした際の LocalState の場所
 let tekuteku_url = "";
@@ -317,7 +318,6 @@ async function recognizer_amivoice() {
 }
 
 async function check_processlocally() {
-	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 	if (!( typeof SpeechRecognition.available === 'function' )) return;
 
 	let lang_available = [];
@@ -335,7 +335,6 @@ async function check_processlocally() {
 
 async function prepare_processlocally( lang ) {
 	if ( lang == undefined ) return false;
-	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 	let rc = await SpeechRecognition.install({langs:[lang],processLocally:true,});
 	console.log(`install ${lang} -> ${rc}`);
 	return rc;
@@ -343,7 +342,6 @@ async function prepare_processlocally( lang ) {
 
 async function recognizer_default( is_local = false ) {
 	let state = 9;	// 0:未認証未接続 / 1:中間状態 / 2:接続中 / 9:エラー
-	var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
 	let sprec = new SpeechRecognition();
 	sprec.continuous = false;
 	sprec.interimResults = true;
