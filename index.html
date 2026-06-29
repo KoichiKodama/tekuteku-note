@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-06-27</title>
+<title>てくてくノート ver 2026-06-29</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -204,7 +204,7 @@
 <script type="text/javascript" src="./tools/mic.js"></script>
 <script type="text/javascript">
 'use strict';
-var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 let local_folder = ""; // msix でインストールした際の LocalState の場所
 let tekuteku_url = "";
@@ -869,7 +869,7 @@ if (is_mobile) $('#my-text').on('focus',()=>{
 });
 
 const resize_observer = new ResizeObserver((e)=>{ set_screen_mode(); });
-$('div.container-fluid,#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // body を加えると resize event が頻発する。
+$('#my-text,#pre-roll,#table-takers').each((i,e)=>{resize_observer.observe(e);}); // event 発生を抑制するために body と div.container-fluid は除く。
 $(window).on("load orientationchange",()=>{ set_screen_mode(); });
 $(window).on('beforeunload pagehide',()=>{ shortcut_to_cookie(); });
 $('#whiteboard-div').on('scroll',function(event){ auto_scroll_whiteboard = ( this.scrollHeight-this.scrollTop-this.clientHeight < 10 ? true:false ); });
