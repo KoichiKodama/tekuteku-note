@@ -72,7 +72,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-06-25";
+static std::string m_version = "build 2026-07-03";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_local_folder = ".";
@@ -868,11 +868,13 @@ void check_network( asio::io_context& ioc, asio::yield_context yield ) {
 }
 
 void launch_browser() {
+	#ifdef _WINDOWS
 	std::string m_host_url = (boost::format("http://localhost:%d") % m_port).str();
 	#ifdef MSIX
 	winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(winrt::to_hstring(m_host_url))).get();
 	#else
 	if (!( reinterpret_cast<uint64_t>(ShellExecute(NULL,"open",m_host_url.c_str(),NULL,NULL,SW_SHOWNORMAL)) > 32 )) throw std::runtime_error("spawn_client");
+	#endif
 	#endif
 }
 
@@ -923,7 +925,6 @@ int main( int argc, char** argv ) {
 		load_server_certificate(ctx,key,crt,chain,pwd);
 		#endif
 
-		#ifdef _WINDOWS
 		// 同一ポートでの多重起動禁止はトレーの存在確認で行う。
 		std::string tray_name = (boost::format("tekuteku-note-%04d") % m_port).str().c_str();
 		if ( tray_exist(tray_name.c_str()) == 1 ) {
@@ -931,6 +932,7 @@ int main( int argc, char** argv ) {
 			launch_browser();
 			return 0;
 		}
+		#ifdef _WINDOWS
 		#ifndef MSIX
 		std::vector<boost::process::v2::process> m_exec;
 		if ( m_cfg.contains("exec") ) { for (auto& a:m_cfg["exec"]) {
@@ -966,11 +968,7 @@ int main( int argc, char** argv ) {
 			catch ( boost::system::system_error& e ) { log(boost::format("boost exception in thread_x : %s") % e.what()); }
 		}));
 
-		#ifdef _WINDOWS
-		#ifndef USE_SSL
 		launch_browser();
-		#endif
-		#endif
 		if ( tray_init((boost::format("tekuteku-note-%04d") % m_port).str().c_str(),"tekuteku.ico",terminate_server) == 0 ) { while ( tray_loop(1) == 0 ) {} }
 		#ifdef _WINDOWS
 		#ifndef MSIX
