@@ -10,8 +10,8 @@ import logging
 version = '2026-05-14'
 wifi_dev = ''
 
-logging.basicConfig(filename='pi-control.log',level=logging.INFO,format='%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s')
-logger = logging.getLogger(__name__)
+# logging.basicConfig(filename='pi-control.log',level=logging.INFO,format='%(levelname)s %(asctime)s [%(filename)s:%(lineno)d] %(message)s')
+# logger = logging.getLogger(__name__)
 
 def get_key(text):
 	i = text.find('=')
@@ -186,4 +186,4 @@ match job:
 	case _:
 		print_responce({"status":0,"message":"unknown job={0}".format(job)})
 
-logger.info("job={0}".format(job))
+# logger.info("job={0}".format(job))
