@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-07-07</title>
+<title>てくてくノート ver 2026-07-10</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -610,7 +610,11 @@ async function parse_token(response) {
 		}
 		let x = new bootstrap.Modal($('#token').get(0),{});
 		let d = new Promise((resolve)=>{
-			$('#token-ok').one('click',()=>{ token_pass = $('#token-pass').val().padStart(32,' '); x.hide(); });
+			$('#token-ok').one('click',()=>{
+				let c = $('#token-pass').val();
+				if ( c.length != 0 ) token_pass = c.padStart(32,' ');
+				x.hide();
+			});
 			$('#token')
 				.off('hidden.bs.modal')
 				.one('hidden.bs.modal',()=>{ resolve(); x.dispose(); });

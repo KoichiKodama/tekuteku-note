@@ -2,15 +2,23 @@
 <html lang="ja" data-bs-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>config.json 作成</title>
+<title>設定ファイル作成 ver-2026-07-10</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no'>
 </head>
 <body>
 <div class="container" style="max-width:800px;">
-	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">パスワード</span><input type="text" id="key" class="form-control" value="" maxlength="32"/></div>
+	<div class="card m-2"><div class="card-body">
+		<h5 class="card-title text-center">このページの役割</h5>
+		<p>
+		有料サービスを使うには、各サービス用のトークンを暗号化して設定ファイルに記載する必要があります。
+		このページでこの設定ファイル (config.json) を作成します。
+		てくてくノートで有料サービスを使う際には、下記のパスワードが必要です。
+		</p>
+	</div></div>
 	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">AmiVoice</span><input type="text" id="amivoice" class="form-control" value=""/></div>
 	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">Google 翻訳</span><input type="text" id="google-translate" class="form-control" value=""/></div>
+	<div class="input-group m-2"><span class="input-group-text justify-content-end w-25">パスワード</span><input type="text" id="key" class="form-control" value="" maxlength="32"/></div>
 	<div class="input-group m-2 justify-content-end"><button class="btn btn-secondary" id="save">保存</button></div>
 </div>
 <script src='./tools/jquery-3.6.0.min.js'></script>

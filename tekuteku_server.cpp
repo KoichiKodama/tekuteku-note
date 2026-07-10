@@ -72,7 +72,7 @@ namespace beast = boost::beast;
 namespace asio = boost::asio;
 
 static nlohmann::json m_cfg;
-static std::string m_version = "build 2026-07-03";
+static std::string m_version = "build 2026-07-11";
 static std::string m_hostname_local = "";
 static std::string m_logfile = "tekuteku-note.log";
 static std::string m_local_folder = ".";
@@ -655,15 +655,15 @@ private:
 	std::string m_url;
 };
 
-bool is_accessible( const std::string& f ) {
+bool is_accessible( const std::string& f, bool is_local ) {
 	if ( f == "/index.html" ) return true;
 	if ( f == "/tekuteku.ico" ) return true;
 	if ( f == "/emoji-smile.svg" ) return true;
-	if ( f.substr(0,6) == "/tools" ) return true;
 	if ( f == "/pi.html" ) return true;
 	if ( f == "/pi-control.sh" ) return true;
 	if ( f == "/ssl-keys/tekuteku-pi.crt" ) return true;
-	if ( f == "/k.html" ) return true;
+	if ( f.substr(0,6) == "/tools" ) return true;
+	if ( is_local && f == "/mk-config.html" ) return true;
 	return false;
 }
 
@@ -671,6 +671,7 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 	beast::error_code ec;
 	asio::ip::tcp::socket& socket = beast::get_lowest_layer(stream).socket();
 	asio::ip::tcp::socket::endpoint_type ep = socket.remote_endpoint(ec);
+	bool is_local = ( ep.address().to_string() == "127.0.0.1" ? true:false);
 	#ifdef USE_SSL
 	stream.async_handshake(asio::ssl::stream_base::server,yield[ec]);
 	#endif
@@ -679,16 +680,16 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 
 	auto response = [&req]( beast::http::status status, const std::string& msg ){
 		beast::http::response<beast::http::string_body> res{status,req.version()};
+		res.set(beast::http::field::content_type,"text/plain; charset=utf-8");
 		res.set(beast::http::field::server,m_server_name);
-		res.set(beast::http::field::content_type,"text/html");
 		res.keep_alive(req.keep_alive());
 		res.body() = msg;
 		res.prepare_payload();
 		return res;
 	};
-	auto bad_request = [&response]( const std::string& msg ){ return response(beast::http::status::bad_request,msg); };
-	auto not_found = [&response]( const std::string& msg ){ return response(beast::http::status::not_found,msg+"(current="+std::filesystem::current_path().string()+")"); };
-	auto internal_error = [&response]( const std::string& msg ){ return response(beast::http::status::internal_server_error,msg); };
+	auto bad_request = [&response]( const std::string& msg ){ return response(beast::http::status::bad_request,"bad_request\n"+msg); };
+	auto not_found = [&response]( const std::string& msg ){ return response(beast::http::status::not_found,"not_found\n"+msg+"("+std::filesystem::current_path().string()+")"); };
+	auto internal_error = [&response]( const std::string& msg ){ return response(beast::http::status::internal_server_error,"internal_server_error\n"+msg); };
 	reply_t reply{stream,yield};
 
 	beast::http::async_read(stream,buffer,req,yield[ec]);
@@ -712,7 +713,7 @@ void exec_http_session( tcp_stream_t& stream, asio::yield_context yield ) {
 	}
 
 	if ( req.method() != beast::http::verb::get && req.method() != beast::http::verb::head ) return reply(bad_request("unsupported http-method"));
-	if ( is_accessible(t.path()) == false ) {
+	if ( is_accessible(t.path(),is_local) == false ) {
 		log(boost::format("exec_http_session rejected '%s'") % t.path());
 		return reply(not_found(t.path()));
 	}
