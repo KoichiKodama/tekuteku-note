@@ -2,7 +2,7 @@
 <html lang='ja'>
 <head>
 <meta charset="utf-8">
-<title>てくてくノート ver 2026-07-10</title>
+<title>てくてくノート ver 2026-07-11</title>
 <link href='./tools/bootstrap-5.3.0/css/bootstrap.min.css' rel='stylesheet'>
 <link rel='icon' href='./tekuteku.ico'>
 <meta name='viewport' content='width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no'> <!-- user-scalable=no でスマホ入力での画面縮小を抑制できる -->
@@ -139,13 +139,15 @@
 <div class="modal-content">
 	<div class="modal-header">
 		<h5 class="modal-title">有料サービスが使えます</h5>
-		<button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="close"></button>
 	</div>
 	<div class="modal-body">
 		<p class="modal-text">パスワードを入力して下さい</p>
 		<input class="form-control" type="password" id="token-pass"/>
 	</div>
-	<div class="modal-footer"><button type="button" class="btn btn-primary" id="token-ok">OK</button></div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">使わない</button>
+		<button type="button" class="btn btn-primary" id="token-ok">使う</button>
+	</div>
 </div>
 </div>
 </div>
